@@ -69,6 +69,33 @@ variable "ssh_password" {
   default   = "packer-build-only"
 }
 
+# Build-Metadaten (werden von CI/CD Pipeline gesetzt)
+variable "ci_pipeline_id" {
+  type        = string
+  default     = "manual"
+  description = "GitLab CI Pipeline ID"
+}
+variable "ci_pipeline_source" {
+  type        = string
+  default     = "manual"
+  description = "Trigger-Quelle (manual, schedule, push, web)"
+}
+variable "ci_commit_sha" {
+  type        = string
+  default     = "unknown"
+  description = "Git Commit SHA"
+}
+variable "ci_commit_ref" {
+  type        = string
+  default     = "main"
+  description = "Git Branch oder Tag"
+}
+variable "git_release_tag" {
+  type        = string
+  default     = "unreleased"
+  description = "Semantic Release Version (z.B. ubuntu-2404/v1.0.0)"
+}
+
 source "proxmox-iso" "ubuntu" {
   proxmox_url              = var.proxmox_url
   username                 = var.proxmox_username
@@ -143,8 +170,30 @@ source "proxmox-iso" "ubuntu" {
 
   # Template
   template_name        = var.template_name
-  template_description = "Ubuntu 24.04 LTS Cloud-Init Template — Packer ${formatdate("YYYY-MM-DD", timestamp())}"
-  tags                 = "latest;os:ubuntu;v:2404;packer;build:${formatdate("YYYYMMDD", timestamp())}"
+  template_description = join("\n", [
+    "Ubuntu 24.04 LTS Cloud-Init Template",
+    "=====================================",
+    "Build-Datum:     ${formatdate("YYYY-MM-DD HH:mm", timestamp())}",
+    "Packer Version:  ${packer.version}",
+    "ISO:             ${var.iso_file}",
+    "Git Commit:      ${var.ci_commit_sha}",
+    "Git Branch/Tag:  ${var.ci_commit_ref}",
+    "Release Tag:     ${var.git_release_tag}",
+    "Pipeline ID:     ${var.ci_pipeline_id}",
+    "Trigger:         ${var.ci_pipeline_source}",
+    "Proxmox Node:    ${var.proxmox_node}",
+    "Storage:         ${var.vm_storage_pool}",
+    "Netzwerk:        ${var.vm_bridge}",
+    "CPU:             ${var.vm_cpu_cores} Cores",
+    "RAM:             ${var.vm_memory} MB",
+    "Disk:            ${var.vm_disk_size}",
+    "Cloud-Init:      Ja",
+    "QEMU Agent:      Ja",
+    "Repo:            https://github.com/strausmann/homelab-proxmox-templates",
+    "GitLab Release:  https://git.strausmann.de/strausmann/proxmox-templates/-/releases/${var.git_release_tag}",
+    "GitLab Pipeline: https://git.strausmann.de/strausmann/proxmox-templates/-/pipelines/${var.ci_pipeline_id}",
+  ])
+  tags = "latest;os:ubuntu;v:2404;packer;build:${formatdate("YYYYMMDD", timestamp())}"
 }
 
 build {
