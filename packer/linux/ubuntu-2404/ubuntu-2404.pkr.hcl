@@ -144,6 +144,7 @@ source "proxmox-iso" "ubuntu" {
   # Template
   template_name        = var.template_name
   template_description = "Ubuntu 24.04 LTS Cloud-Init Template — Packer ${formatdate("YYYY-MM-DD", timestamp())}"
+  tags                 = "latest;os:ubuntu;v:2404;packer;build:${formatdate("YYYYMMDD", timestamp())}"
 }
 
 build {
