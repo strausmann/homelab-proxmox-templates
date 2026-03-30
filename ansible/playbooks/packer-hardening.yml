@@ -44,6 +44,17 @@
         enabled: true
         state: started
 
+    # --- Timezone ---
+    - name: Timezone auf Europe/Berlin setzen
+      community.general.timezone:
+        name: Europe/Berlin
+
+    # --- Locale ---
+    - name: Deutsche Locale generieren
+      community.general.locale_gen:
+        name: de_DE.UTF-8
+        state: present
+
     # --- SSH Hardening ---
     - name: SSH Passwort-Login deaktivieren
       ansible.builtin.lineinfile:
@@ -73,17 +84,6 @@
           APT::Periodic::Unattended-Upgrade "1";
           APT::Periodic::AutocleanInterval "7";
         mode: "0644"
-
-    # --- Timezone ---
-    - name: Timezone setzen
-      community.general.timezone:
-        name: Europe/Berlin
-
-    # --- Locale ---
-    - name: Deutsche Locale generieren
-      community.general.locale_gen:
-        name: de_DE.UTF-8
-        state: present
 
     # --- Cloud-Init Datasource ---
     - name: Cloud-Init Datasource auf NoCloud setzen

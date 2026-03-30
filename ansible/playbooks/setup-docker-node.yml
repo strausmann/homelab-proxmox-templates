@@ -1,0 +1,133 @@
+---
+# Vollstaendiges Docker-Node Setup mit Newt (Pangolin) und Hawser (Dockhand)
+# Fuer HomeLab Docker-Nodes die in Dockhand und Pangolin integriert werden
+#
+# Voraussetzungen:
+#   - Docker bereits installiert (setup-docker-base.yml)
+#   - Tailscale aktiv (base-linux.yml)
+#   - Hawser Token aus Dockhand (mcp__dockhand__create_hawser_token)
+#   - Pangolin Site erstellt mit Newt-Credentials
+#
+# Aufruf:
+#   ansible-playbook playbooks/setup-docker-node.yml \
+#     -e hawser_token=<HAWSER_TOKEN> \
+#     -e newt_id=<NEWT_ID> \
+#     -e newt_secret=<NEWT_SECRET> \
+#     -e node_name=<HOSTNAME>
+- name: Docker Node Setup (Newt + Hawser)
+  hosts: docker_nodes
+  become: true
+
+  vars:
+    # Dockhand/Hawser
+    dockhand_server_url: "wss://hhdocker01.hound-cod.ts.net/api/hawser/connect"
+    hawser_image: "ghcr.io/finsys/hawser:latest"
+    hawser_token: ""  # Muss uebergeben werden
+    stacks_dir: "/docker/stacks"
+
+    # Pangolin/Newt
+    pangolin_endpoint: "https://backend.strausmann.cloud"
+    newt_image: "fosrl/newt:latest"
+    newt_id: ""      # Muss uebergeben werden
+    newt_secret: ""   # Muss uebergeben werden
+    node_name: "{{ inventory_hostname }}"
+
+  tasks:
+    # --- Validierung ---
+    - name: Pruefen ob Hawser Token gesetzt ist
+      ansible.builtin.assert:
+        that: hawser_token | length > 0
+        fail_msg: "hawser_token muss gesetzt sein (aus Dockhand UI/API)"
+
+    - name: Pruefen ob Newt Credentials gesetzt sind
+      ansible.builtin.assert:
+        that:
+          - newt_id | length > 0
+          - newt_secret | length > 0
+        fail_msg: "newt_id und newt_secret muessen gesetzt sein (aus Pangolin Site)"
+
+    # --- Hawser (Dockhand Agent) ---
+    - name: Hawser Stack-Verzeichnis erstellen
+      ansible.builtin.file:
+        path: "{{ stacks_dir }}/dockhand-hawser"
+        state: directory
+        mode: "0755"
+
+    - name: Hawser docker-compose.yml erstellen
+      ansible.builtin.copy:
+        dest: "{{ stacks_dir }}/dockhand-hawser/docker-compose.yml"
+        mode: "0644"
+        content: |
+          # Dockhand Hawser Agent
+          # Verwaltet von Ansible — nicht manuell aendern
+          services:
+            dockhand-hawser:
+              image: {{ hawser_image }}
+              container_name: dockhand-hawser
+              restart: always
+              environment:
+                DOCKHAND_SERVER_URL: "{{ dockhand_server_url }}"
+                TOKEN: "{{ hawser_token }}"
+                STACKS_DIR: "{{ stacks_dir }}"
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - {{ stacks_dir }}:{{ stacks_dir }}
+                - /etc/localtime:/etc/localtime:ro
+              healthcheck:
+                test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 10s
+
+    - name: Hawser Container starten
+      community.docker.docker_compose_v2:
+        project_src: "{{ stacks_dir }}/dockhand-hawser"
+        state: present
+
+    # --- Pangolin Newt Agent ---
+    - name: Newt Stack-Verzeichnis erstellen
+      ansible.builtin.file:
+        path: "{{ stacks_dir }}/pangolin-newt"
+        state: directory
+        mode: "0755"
+
+    - name: Newt docker-compose.yml erstellen
+      ansible.builtin.copy:
+        dest: "{{ stacks_dir }}/pangolin-newt/docker-compose.yml"
+        mode: "0644"
+        content: |
+          # Pangolin Newt Agent
+          # Verwaltet von Ansible — nicht manuell aendern
+          services:
+            pangolin-newt:
+              image: {{ newt_image }}
+              container_name: pangolin-newt
+              restart: always
+              environment:
+                PANGOLIN_ENDPOINT: "{{ pangolin_endpoint }}"
+                NEWT_ID: "{{ newt_id }}"
+                NEWT_SECRET: "{{ newt_secret }}"
+              volumes:
+                - /etc/localtime:/etc/localtime:ro
+              healthcheck:
+                test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 15s
+
+    - name: Newt Container starten
+      community.docker.docker_compose_v2:
+        project_src: "{{ stacks_dir }}/pangolin-newt"
+        state: present
+
+    # --- Status-Ausgabe ---
+    - name: Docker Container Status
+      ansible.builtin.command: docker ps --format '{{ "{{" }}.Names{{ "}}" }}\t{{ "{{" }}.Status{{ "}}" }}'
+      register: docker_status
+      changed_when: false
+
+    - name: Status anzeigen
+      ansible.builtin.debug:
+        msg: "{{ docker_status.stdout_lines }}"

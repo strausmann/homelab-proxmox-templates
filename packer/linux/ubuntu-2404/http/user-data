@@ -5,6 +5,7 @@ autoinstall:
   keyboard:
     layout: de
     variant: ''
+  timezone: Europe/Berlin
   identity:
     hostname: ubuntu-packer-build
     username: packer
@@ -13,13 +14,15 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: true
-    authorized-keys: []
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
   packages:
     - qemu-guest-agent
     - curl
     - wget
     - vim
     - htop
+    - jq
     - git
     - python3
     - python3-pip
@@ -28,6 +31,7 @@ autoinstall:
     - ca-certificates
     - gnupg
     - lsb-release
+    - unzip
   package_update: true
   package_upgrade: true
   network:
@@ -44,3 +48,5 @@ autoinstall:
     - "chmod 440 /target/etc/sudoers.d/packer"
     # QEMU Guest Agent aktivieren
     - "curtin in-target -- systemctl enable qemu-guest-agent"
+    # Timezone setzen
+    - "curtin in-target -- timedatectl set-timezone Europe/Berlin"

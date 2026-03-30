@@ -1,0 +1,23 @@
+---
+# Master-Playbook: Vollstaendiges Node-Setup
+# Fuehrt alle Playbooks in der richtigen Reihenfolge aus
+#
+# Aufruf fuer einen neuen Docker-Node:
+#   ansible-playbook playbooks/site.yml -l runner-build \
+#     -e hawser_token=<TOKEN> \
+#     -e newt_id=<ID> \
+#     -e newt_secret=<SECRET> \
+#     -e patchmon_api_id=<ID> \
+#     -e patchmon_api_key=<KEY>
+
+# Phase 1: Basis-Konfiguration
+- import_playbook: base-linux.yml
+
+# Phase 2: Docker
+- import_playbook: setup-docker-base.yml
+
+# Phase 3: Monitoring
+- import_playbook: setup-patchmon-agent.yml
+
+# Phase 4: Dockhand + Pangolin (nur Docker-Nodes)
+- import_playbook: setup-docker-node.yml

@@ -1,0 +1,83 @@
+---
+# Docker Base Setup fuer alle Docker-Nodes
+# Installiert Docker CE mit optimierter Daemon-Konfiguration
+- name: Docker Base Setup
+  hosts: docker_nodes
+  become: true
+
+  vars:
+    docker_daemon_config:
+      log-driver: "json-file"
+      log-opts:
+        max-size: "10m"
+        max-file: "3"
+      storage-driver: "overlay2"
+      live-restore: true
+      default-address-pools:
+        - base: "172.20.0.0/14"
+          size: 24
+      metrics-addr: "0.0.0.0:9323"
+      experimental: true
+      features:
+        buildkit: true
+
+  tasks:
+    # --- Docker CE installieren ---
+    - name: Docker GPG Key hinzufuegen
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Docker Repository hinzufuegen
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        state: present
+        filename: docker
+
+    - name: Docker CE installieren
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    # --- Docker Daemon Config ---
+    - name: Docker Daemon Konfiguration schreiben
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: "{{ docker_daemon_config | to_nice_json }}"
+        mode: "0644"
+      notify: Docker neustarten
+
+    # --- Docker Verzeichnisse ---
+    - name: Docker Stacks Verzeichnis erstellen
+      ansible.builtin.file:
+        path: /docker/stacks
+        state: directory
+        mode: "0755"
+
+    # --- Docker Service ---
+    - name: Docker Service aktivieren
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    # --- User zur Docker-Gruppe ---
+    - name: Ubuntu User zur Docker-Gruppe hinzufuegen
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+      ignore_errors: true
+
+  handlers:
+    - name: Docker neustarten
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted

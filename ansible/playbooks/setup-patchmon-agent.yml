@@ -1,0 +1,54 @@
+---
+# PatchMon Agent Installation
+# Installiert den PatchMon Agent fuer Patch-Monitoring
+# Voraussetzung: PatchMon Onboarding API-Credentials als Variablen
+#
+# Aufruf:
+#   ansible-playbook playbooks/setup-patchmon-agent.yml \
+#     -e patchmon_api_id=<ID> -e patchmon_api_key=<KEY>
+#
+# Oder ueber Vault:
+#   ansible-playbook playbooks/setup-patchmon-agent.yml \
+#     -e @group_vars/secrets.local.yml
+- name: PatchMon Agent Setup
+  hosts: all
+  become: true
+
+  vars:
+    patchmon_url: "https://patchmon.strausmann.cloud"
+    patchmon_api_id: ""  # Muss uebergeben werden
+    patchmon_api_key: ""  # Muss uebergeben werden
+
+  tasks:
+    - name: Pruefen ob PatchMon Credentials gesetzt sind
+      ansible.builtin.assert:
+        that:
+          - patchmon_api_id | length > 0
+          - patchmon_api_key | length > 0
+        fail_msg: "patchmon_api_id und patchmon_api_key muessen gesetzt sein"
+
+    - name: PatchMon Agent installieren
+      ansible.builtin.shell:
+        cmd: |
+          curl -sf "{{ patchmon_url }}/api/v1/hosts/install" \
+            -H "X-API-ID: {{ patchmon_api_id }}" \
+            -H "X-API-KEY: {{ patchmon_api_key }}" | sh
+        creates: /usr/local/bin/patchmon-agent
+      register: patchmon_install
+
+    - name: PatchMon Agent Status pruefen
+      ansible.builtin.systemd:
+        name: patchmon-agent
+        state: started
+        enabled: true
+      when: patchmon_install.changed
+
+    - name: PatchMon Agent Version anzeigen
+      ansible.builtin.command: patchmon-agent --version
+      register: patchmon_version
+      changed_when: false
+      ignore_errors: true
+
+    - name: Version ausgeben
+      ansible.builtin.debug:
+        msg: "PatchMon Agent: {{ patchmon_version.stdout | default('nicht installiert') }}"

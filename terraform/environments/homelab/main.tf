@@ -1,13 +1,22 @@
-# --- PoC: GitLab Runner Build VM ---
-# Erstellt eine Ubuntu 24.04 VM aus dem Packer-Template
-# Referenz: https://github.com/strausmann/homelab-pangolin-client/issues/175
+# --- HomeLab VM Deployments ---
+# Erstellt VMs aus Packer-Templates via Cloud-Init
+#
+# SSH Key: ssh-ed25519 (ansible-vm-homelab-nodes)
+# Referenzen:
+#   - Issue #175: https://github.com/strausmann/homelab-pangolin-client/issues/175
+#   - Issue #176: https://github.com/strausmann/homelab-pangolin-client/issues/176
 
+locals {
+  ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+}
+
+# --- GitLab Runner: Build (Multi-Arch Docker Builds) ---
 module "runner_build" {
   source = "../../modules/linux-vm"
 
   vm_name        = "runner-build"
   vm_description = "GitLab Runner fuer Multi-Arch Docker Builds"
-  vm_tags        = ["terraform", "linux", "gitlab-runner"]
+  vm_tags        = ["terraform", "linux", "gitlab-runner", "docker"]
 
   proxmox_node = "hhpve01"
   template_id  = 9000  # tmpl-ubuntu-2404
@@ -17,14 +26,42 @@ module "runner_build" {
   disk_size    = 200
   storage_pool = "local-lvm"
 
-  ip_address   = "dhcp"
-  dns_servers  = ["10.1.0.1"]
+  ip_address    = "dhcp"
+  dns_servers   = ["10.1.0.1"]
   search_domain = "home.lab"
 
   ci_user  = "ubuntu"
-  ssh_keys = [var.ssh_public_key]
+  ssh_keys = [local.ssh_public_key]
+}
+
+# --- GitLab Runner: CI (ionCube, MegaLinter) ---
+module "runner_ci" {
+  source = "../../modules/linux-vm"
+
+  vm_name        = "runner-ci"
+  vm_description = "GitLab Runner fuer CI Jobs (ionCube, MegaLinter)"
+  vm_tags        = ["terraform", "linux", "gitlab-runner", "docker"]
+
+  proxmox_node = "hhpve01"
+  template_id  = 9000
+
+  cpu_cores    = 4
+  memory       = 4096
+  disk_size    = 50
+  storage_pool = "local-lvm"
+
+  ip_address    = "dhcp"
+  dns_servers   = ["10.1.0.1"]
+  search_domain = "home.lab"
+
+  ci_user  = "ubuntu"
+  ssh_keys = [local.ssh_public_key]
 }
 
 output "runner_build_ip" {
   value = module.runner_build.ipv4_address
+}
+
+output "runner_ci_ip" {
+  value = module.runner_ci.ipv4_address
 }

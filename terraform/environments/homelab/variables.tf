@@ -20,10 +20,3 @@ variable "proxmox_skip_tls" {
   type    = bool
   default = true
 }
-
-# --- SSH ---
-
-variable "ssh_public_key" {
-  type        = string
-  description = "SSH Public Key fuer VMs"
-}
