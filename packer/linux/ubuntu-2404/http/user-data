@@ -40,7 +40,7 @@ autoinstall:
   package_upgrade: true
   network:
     ethernets:
-      ens18:
+      enp6s18:
         dhcp4: false
         addresses:
           - 172.16.60.250/22
