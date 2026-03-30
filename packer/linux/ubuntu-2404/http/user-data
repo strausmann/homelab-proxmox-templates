@@ -31,21 +31,11 @@ autoinstall:
           - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
           - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
   packages:
+    - openssh-server
     - qemu-guest-agent
-    - curl
-    - wget
-    - vim
-    - htop
-    - jq
-    - git
     - python3
-    - python3-pip
     - cloud-init
-    - apt-transport-https
-    - ca-certificates
-    - gnupg
-    - lsb-release
-    - unzip
+    - curl
   package_update: true
   package_upgrade: true
   network:

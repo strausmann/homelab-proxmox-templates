@@ -231,6 +231,14 @@ build {
     ]
   }
 
+  # Ansible Provisioner für Base-Setup
+  provisioner "ansible" {
+    playbook_file = "../../../ansible/playbooks/packer-hardening.yml"
+    extra_arguments = [
+      "--extra-vars", "packer_build=true"
+    ]
+  }
+
   # Cleanup vor Template-Erstellung
   provisioner "shell" {
     inline = [

@@ -6,6 +6,9 @@
   become: true
   vars:
     packer_build: false
+    ssh_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
 
   tasks:
     # --- System-Updates ---
@@ -37,7 +40,15 @@
           - openssh-server
           - console-setup
           - keyboard-configuration
+          - chrony
+          - fail2ban
+          - prometheus-node-exporter
+          - unattended-upgrades
         state: present
+
+    # ===========================
+    # System-Basis Konfiguration
+    # ===========================
 
     # --- QEMU Guest Agent ---
     - name: QEMU Guest Agent aktivieren
@@ -84,27 +95,27 @@
         value: UTF-8
         vtype: select
 
-    # --- SSH Hardening ---
-    - name: SSH Passwort-Login deaktivieren
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PasswordAuthentication"
-        line: "PasswordAuthentication no"
-        state: present
+    # ===========================
+    # NTP (Chrony)
+    # ===========================
+    - name: Chrony Service aktivieren
+      ansible.builtin.systemd:
+        name: chrony
+        enabled: true
+        state: started
 
-    - name: SSH Root-Login verbieten
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PermitRootLogin"
-        line: "PermitRootLogin no"
-        state: present
+    # ===========================
+    # Fail2ban
+    # ===========================
+    - name: Fail2ban Service aktivieren
+      ansible.builtin.systemd:
+        name: fail2ban
+        enabled: true
+        state: started
 
-    # --- Automatische Security-Updates ---
-    - name: unattended-upgrades installieren
-      ansible.builtin.apt:
-        name: unattended-upgrades
-        state: present
-
+    # ===========================
+    # Automatische Security-Updates
+    # ===========================
     - name: Automatische Security-Updates aktivieren
       ansible.builtin.copy:
         dest: /etc/apt/apt.conf.d/20auto-upgrades
@@ -114,7 +125,127 @@
           APT::Periodic::AutocleanInterval "7";
         mode: "0644"
 
-    # --- Cloud-Init Datasource ---
+    # ===========================
+    # Prometheus Node Exporter
+    # ===========================
+    - name: Prometheus Node Exporter aktivieren
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        enabled: true
+        state: started
+
+    # ===========================
+    # Tailscale APT Repository + Paket
+    # ===========================
+    - name: Tailscale GPG Key herunterladen
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        mode: "0644"
+
+    - name: Tailscale APT Repository hinzufuegen
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu noble main"
+        filename: tailscale
+        state: present
+
+    - name: Tailscale installieren
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+
+    - name: Tailscaled Service aktivieren (nicht starten)
+      ansible.builtin.systemd:
+        name: tailscaled
+        enabled: true
+
+    # ===========================
+    # CrowdSec Agent
+    # ===========================
+    - name: CrowdSec Repository hinzufuegen
+      ansible.builtin.shell:
+        cmd: curl -s https://install.crowdsec.net | bash
+      args:
+        creates: /etc/apt/sources.list.d/crowdsec_crowdsec.list
+
+    - name: CrowdSec installieren
+      ansible.builtin.apt:
+        name: crowdsec
+        state: present
+        update_cache: true
+
+    - name: CrowdSec Service aktivieren (nicht starten)
+      ansible.builtin.systemd:
+        name: crowdsec
+        enabled: true
+        state: stopped
+
+    # ===========================
+    # SSH Hardening
+    # ===========================
+    - name: SSH Passwort-Login deaktivieren
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+
+    - name: SSH Root-Login per Key erlauben
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin prohibit-password"
+        state: present
+
+    # --- SSH Keys permanent fuer root ---
+    - name: Root .ssh Verzeichnis erstellen
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: SSH Keys fuer root setzen
+      ansible.builtin.copy:
+        dest: /root/.ssh/authorized_keys
+        content: |
+          {{ ssh_keys | join('\n') }}
+        owner: root
+        group: root
+        mode: "0600"
+
+    # --- SSH Keys permanent fuer ubuntu User (falls vorhanden) ---
+    - name: Pruefen ob ubuntu User existiert
+      ansible.builtin.getent:
+        database: passwd
+        key: ubuntu
+      register: ubuntu_user
+      failed_when: false
+
+    - name: Ubuntu User .ssh Verzeichnis erstellen
+      ansible.builtin.file:
+        path: /home/ubuntu/.ssh
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0700"
+      when: ubuntu_user.ansible_facts.getent_passwd.ubuntu is defined
+
+    - name: SSH Keys fuer ubuntu User setzen
+      ansible.builtin.copy:
+        dest: /home/ubuntu/.ssh/authorized_keys
+        content: |
+          {{ ssh_keys | join('\n') }}
+        owner: ubuntu
+        group: ubuntu
+        mode: "0600"
+      when: ubuntu_user.ansible_facts.getent_passwd.ubuntu is defined
+
+    # ===========================
+    # Cloud-Init Datasource
+    # ===========================
     - name: Cloud-Init Datasource auf NoCloud setzen
       ansible.builtin.copy:
         dest: /etc/cloud/cloud.cfg.d/99-pve.cfg
@@ -122,7 +253,9 @@
           datasource_list: [NoCloud, ConfigDrive, None]
         mode: "0644"
 
-    # --- Cleanup (nur im Packer Build) ---
+    # ===========================
+    # Cleanup (nur im Packer Build)
+    # ===========================
     - name: APT Cache leeren
       ansible.builtin.apt:
         clean: true
