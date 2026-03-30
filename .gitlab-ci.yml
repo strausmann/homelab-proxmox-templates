@@ -7,9 +7,10 @@ stages:
 variables:
   # Proxmox Verbindung (CI/CD Variablen)
   # PKR_VAR_proxmox_url, PKR_VAR_proxmox_username, PKR_VAR_proxmox_token
-  # PKR_VAR_proxmox_node, PKR_VAR_vm_storage_pool, PKR_VAR_vm_bridge
-  # werden als CI/CD Variablen gesetzt (masked + protected)
+  # PKR_VAR_proxmox_node, PKR_VAR_vm_storage_pool, PKR_VAR_vm_bridge, PKR_VAR_iso_file
   PACKER_CACHE_DIR: /build/packer_cache
+  # Basis VM-ID fuer Templates (wird pro Build inkrementiert)
+  TEMPLATE_BASE_ID: "9000"
 
 # --- Validate Stage ---
 packer_validate:
@@ -45,12 +46,29 @@ build_ubuntu_2404:
     - packer init packer/linux/ubuntu-2404/
   script:
     - |
-      # Template loeschen falls es bereits existiert (Rebuild-Szenario)
-      curl -sfk -X DELETE \
-        "https://${PKR_VAR_proxmox_url##https://}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${PKR_VAR_vm_id:-9000}?purge=1&destroy-unreferenced-disks=1" \
-        -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" \
-        2>/dev/null || true
-      sleep 5
+      # Versionierte VM-ID und Template-Name
+      BUILD_DATE=$(date +%Y%m%d)
+      BUILD_NUM=${CI_PIPELINE_IID:-1}
+      VM_ID=$((TEMPLATE_BASE_ID + BUILD_NUM))
+      TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}"
+
+      echo "================================================="
+      echo "  Template Build: ${TEMPLATE_NAME}"
+      echo "  VM-ID: ${VM_ID}"
+      echo "  Datum: ${BUILD_DATE}"
+      echo "  Pipeline: ${CI_PIPELINE_IID}"
+      echo "================================================="
+
+      # Pruefen ob die VM-ID bereits existiert
+      HTTP_CODE=$(curl -sfk -o /dev/null -w "%{http_code}" \
+        "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/status/current" \
+        -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" 2>/dev/null || echo "000")
+      if [ "$HTTP_CODE" = "200" ]; then
+        echo "WARNUNG: VM-ID ${VM_ID} existiert bereits. Verwende naechste freie ID."
+        VM_ID=$((VM_ID + 100))
+        TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}-retry"
+        echo "Neue VM-ID: ${VM_ID}, Name: ${TEMPLATE_NAME}"
+      fi
 
       packer build \
         -var "proxmox_url=${PKR_VAR_proxmox_url}" \
@@ -61,8 +79,19 @@ build_ubuntu_2404:
         -var "vm_storage_pool=${PKR_VAR_vm_storage_pool:-nvme}" \
         -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
         -var "iso_file=${PKR_VAR_iso_file:-datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso}" \
+        -var "vm_id=${VM_ID}" \
+        -var "vm_name=ubuntu-2404-packer-${BUILD_NUM}" \
+        -var "template_name=${TEMPLATE_NAME}" \
         -on-error=cleanup \
         packer/linux/ubuntu-2404/
+
+      echo ""
+      echo "================================================="
+      echo "  Template erfolgreich erstellt!"
+      echo "  Name: ${TEMPLATE_NAME}"
+      echo "  VM-ID: ${VM_ID}"
+      echo "  Alte Templates koennen manuell geloescht werden"
+      echo "================================================="
   tags:
     - packer
   rules:
@@ -97,8 +126,6 @@ release:
   tags:
     - packer
   rules:
-    # Trigger eines Scheduled Task
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    # Nie bei normalen Pushes
     - if: $CI_COMMIT_BRANCH
       when: never
