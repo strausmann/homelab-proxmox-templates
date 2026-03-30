@@ -42,6 +42,10 @@ autoinstall:
     ethernets:
       ens18:
         dhcp4: true
+        nameservers:
+          addresses:
+            - 172.16.60.1
+            - 1.1.1.1
     version: 2
   storage:
     layout:
