@@ -5,19 +5,31 @@ stages:
   - release
 
 variables:
-  PACKER_VERSION: "1.12.0"
   # Proxmox Verbindung (CI/CD Variablen)
   # PKR_VAR_proxmox_url, PKR_VAR_proxmox_username, PKR_VAR_proxmox_token
+  # PKR_VAR_proxmox_node, PKR_VAR_vm_storage_pool, PKR_VAR_vm_bridge
   # werden als CI/CD Variablen gesetzt (masked + protected)
+  PACKER_CACHE_DIR: /build/packer_cache
 
 # --- Validate Stage ---
 packer_validate:
   stage: validate
-  image: hashicorp/packer:${PACKER_VERSION}
   before_script:
     - packer init packer/linux/ubuntu-2404/
   script:
-    - packer validate -var-file=packer/linux/ubuntu-2404/ubuntu-2404.auto.pkrvars.hcl packer/linux/ubuntu-2404/
+    - |
+      packer validate \
+        -var "proxmox_url=${PKR_VAR_proxmox_url}" \
+        -var "proxmox_username=${PKR_VAR_proxmox_username}" \
+        -var "proxmox_token=${PKR_VAR_proxmox_token}" \
+        -var "proxmox_node=${PKR_VAR_proxmox_node:-PVE1}" \
+        -var "proxmox_skip_tls=true" \
+        -var "vm_storage_pool=${PKR_VAR_vm_storage_pool:-nvme}" \
+        -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
+        -var "iso_file=${PKR_VAR_iso_file:-datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso}" \
+        packer/linux/ubuntu-2404/
+  tags:
+    - packer
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
       changes:
@@ -27,19 +39,19 @@ packer_validate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # --- Build Stage ---
-.packer_build:
-  stage: build
-  image: hashicorp/packer:${PACKER_VERSION}
-  before_script:
-    - apk add --no-cache ansible openssh-client
-    - packer init packer/linux/ubuntu-2404/
-  tags:
-    - dind  # Runner mit Netzwerkzugang zu Proxmox
-
 build_ubuntu_2404:
-  extends: .packer_build
+  stage: build
+  before_script:
+    - packer init packer/linux/ubuntu-2404/
   script:
     - |
+      # Template loeschen falls es bereits existiert (Rebuild-Szenario)
+      curl -sfk -X DELETE \
+        "https://${PKR_VAR_proxmox_url##https://}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${PKR_VAR_vm_id:-9000}?purge=1&destroy-unreferenced-disks=1" \
+        -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" \
+        2>/dev/null || true
+      sleep 5
+
       packer build \
         -var "proxmox_url=${PKR_VAR_proxmox_url}" \
         -var "proxmox_username=${PKR_VAR_proxmox_username}" \
@@ -47,12 +59,14 @@ build_ubuntu_2404:
         -var "proxmox_node=${PKR_VAR_proxmox_node:-PVE1}" \
         -var "proxmox_skip_tls=true" \
         -var "vm_storage_pool=${PKR_VAR_vm_storage_pool:-nvme}" \
-        -var "iso_storage_pool=${PKR_VAR_iso_storage_pool:-datacenter}" \
-        -var "vm_bridge=${PKR_VAR_vm_bridge:-vmbr0}" \
+        -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
+        -var "iso_file=${PKR_VAR_iso_file:-datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso}" \
         -on-error=cleanup \
         packer/linux/ubuntu-2404/
+  tags:
+    - packer
   rules:
-    # Manueller Trigger
+    # Manueller Trigger via Web UI
     - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
     # Scheduled (monatlich)
@@ -80,9 +94,11 @@ release:
     - npm ci --cache .npm --prefer-offline
   script:
     - npx --no-install semantic-release
+  tags:
+    - packer
   rules:
+    # Trigger eines Scheduled Task
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Nie bei normalen Pushes
+    - if: $CI_COMMIT_BRANCH
       when: never
