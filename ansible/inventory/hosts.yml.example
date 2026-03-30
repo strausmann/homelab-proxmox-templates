@@ -1,0 +1,11 @@
+---
+all:
+  children:
+    gitlab_runners:
+      hosts:
+        runner-build:
+          ansible_host: 10.0.1.50  # Oder Tailscale IP
+          ansible_user: ubuntu
+        runner-ci:
+          ansible_host: 10.0.1.51
+          ansible_user: ubuntu

@@ -1,0 +1,100 @@
+---
+# Ansible Playbook fuer Packer Template-Hardening
+# Laeuft waehrend des Packer Builds auf der VM
+- name: Packer Template Hardening
+  hosts: all
+  become: true
+  vars:
+    packer_build: false
+
+  tasks:
+    # --- System-Updates ---
+    - name: System aktualisieren
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+        cache_valid_time: 3600
+
+    # --- Basis-Pakete ---
+    - name: Basis-Pakete installieren
+      ansible.builtin.apt:
+        name:
+          - qemu-guest-agent
+          - curl
+          - wget
+          - vim
+          - htop
+          - jq
+          - unzip
+          - git
+          - python3
+          - python3-pip
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - cloud-init
+          - openssh-server
+        state: present
+
+    # --- QEMU Guest Agent ---
+    - name: QEMU Guest Agent aktivieren
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
+
+    # --- SSH Hardening ---
+    - name: SSH Passwort-Login deaktivieren
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+
+    - name: SSH Root-Login verbieten
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin no"
+        state: present
+
+    # --- Automatische Security-Updates ---
+    - name: unattended-upgrades installieren
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: present
+
+    - name: Automatische Security-Updates aktivieren
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: "0644"
+
+    # --- Timezone ---
+    - name: Timezone setzen
+      community.general.timezone:
+        name: Europe/Berlin
+
+    # --- Locale ---
+    - name: Deutsche Locale generieren
+      community.general.locale_gen:
+        name: de_DE.UTF-8
+        state: present
+
+    # --- Cloud-Init Datasource ---
+    - name: Cloud-Init Datasource auf NoCloud setzen
+      ansible.builtin.copy:
+        dest: /etc/cloud/cloud.cfg.d/99-pve.cfg
+        content: |
+          datasource_list: [NoCloud, ConfigDrive, None]
+        mode: "0644"
+
+    # --- Cleanup (nur im Packer Build) ---
+    - name: APT Cache leeren
+      ansible.builtin.apt:
+        clean: true
+      when: packer_build | bool

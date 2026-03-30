@@ -1,0 +1,86 @@
+---
+# Base Linux Playbook — Post-Provisioning nach Terraform
+# Konfiguriert eine frisch erstellte Ubuntu/Debian VM
+- name: Base Linux Konfiguration
+  hosts: all
+  become: true
+
+  tasks:
+    # --- System-Updates ---
+    - name: System aktualisieren
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+        cache_valid_time: 3600
+
+    # --- Tailscale installieren ---
+    - name: Tailscale GPG Key hinzufuegen
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        mode: "0644"
+
+    - name: Tailscale Repository hinzufuegen
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu noble main"
+        state: present
+        filename: tailscale
+
+    - name: Tailscale installieren
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+
+    - name: Tailscale aktivieren
+      ansible.builtin.systemd:
+        name: tailscaled
+        enabled: true
+        state: started
+
+    # --- Docker installieren ---
+    - name: Docker GPG Key hinzufuegen
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Docker Repository hinzufuegen
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        state: present
+        filename: docker
+
+    - name: Docker CE installieren
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Docker Service aktivieren
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    # --- Firewall (ufw) ---
+    - name: UFW installieren
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+
+    - name: UFW SSH erlauben
+      community.general.ufw:
+        rule: allow
+        name: OpenSSH
+
+    - name: UFW aktivieren
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming

@@ -1,0 +1,67 @@
+---
+# GitLab Runner Installation und Registrierung
+# Referenz: https://github.com/strausmann/homelab-pangolin-client/issues/175
+- name: GitLab Runner Setup
+  hosts: gitlab_runners
+  become: true
+
+  vars:
+    gitlab_url: "https://git.strausmann.de"
+    # gitlab_runner_token: aus Vault oder CI/CD Variable
+
+  tasks:
+    # --- GitLab Runner Repository ---
+    - name: GitLab Runner GPG Key
+      ansible.builtin.get_url:
+        url: https://packages.gitlab.com/runner/gitlab-runner/gpgkey
+        dest: /usr/share/keyrings/gitlab-runner.asc
+        mode: "0644"
+
+    - name: GitLab Runner Repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/gitlab-runner.asc] https://packages.gitlab.com/runner/gitlab-runner/ubuntu/ noble main"
+        state: present
+        filename: gitlab-runner
+
+    - name: GitLab Runner installieren
+      ansible.builtin.apt:
+        name: gitlab-runner
+        state: present
+        update_cache: true
+
+    # --- Docker Cleanup Cron ---
+    - name: Woechentlicher Docker Prune
+      ansible.builtin.cron:
+        name: "docker-weekly-prune"
+        weekday: "0"
+        hour: "3"
+        minute: "0"
+        job: "docker system prune -af --volumes --filter 'until=168h' >> /var/log/docker-prune.log 2>&1"
+
+    - name: Stuendlicher Buildx Cleanup
+      ansible.builtin.copy:
+        dest: /usr/local/bin/cleanup_buildx.sh
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Verwaiste buildx-Container nach 6 Stunden entfernen
+          current_time=$(date +%s)
+          docker ps --filter "name=buildx_buildkit_job" --format "{{.ID}} {{.Names}}" | while read -r id name; do
+            start_time=$(docker inspect --format '{{.State.StartedAt}}' "$id" | cut -d. -f1)
+            start_epoch=$(date -d "$start_time" +%s 2>/dev/null || echo 0)
+            runtime_hours=$(( (current_time - start_epoch) / 3600 ))
+            if (( runtime_hours > 6 )); then
+              echo "Entferne: $name ($id) — ${runtime_hours}h alt"
+              docker stop "$id" && docker rm "$id"
+            fi
+          done
+          # Verwaiste buildx Volumes
+          docker volume ls --filter "name=buildx_buildkit_job" -q | while read -r vol; do
+            docker volume rm "$vol" 2>/dev/null && echo "Volume entfernt: $vol"
+          done
+
+    - name: Buildx Cleanup Cron
+      ansible.builtin.cron:
+        name: "buildx-cleanup"
+        minute: "0"
+        job: "/usr/local/bin/cleanup_buildx.sh >> /var/log/buildx-cleanup.log 2>&1"

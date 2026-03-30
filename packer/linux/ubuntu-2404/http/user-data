@@ -1,0 +1,46 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: de_DE.UTF-8
+  keyboard:
+    layout: de
+    variant: ''
+  identity:
+    hostname: ubuntu-packer-build
+    username: packer
+    # Passwort: packer-build-only (SHA-512)
+    password: "$6$NHXw3k9nzxXpgUlS$fL6YuqnX509A5hp4oaML9HvqrlQicOmQOQjBoyTwVMYbsI2hYx7clG7zlIeP0xbvRzKEQzuWmNTVNm4Qdn5CI/"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys: []
+  packages:
+    - qemu-guest-agent
+    - curl
+    - wget
+    - vim
+    - htop
+    - git
+    - python3
+    - python3-pip
+    - cloud-init
+    - apt-transport-https
+    - ca-certificates
+    - gnupg
+    - lsb-release
+  package_update: true
+  package_upgrade: true
+  network:
+    ethernets:
+      ens18:
+        dhcp4: true
+    version: 2
+  storage:
+    layout:
+      name: lvm
+  late-commands:
+    # Packer User Sudo-Rechte (werden im Cleanup wieder entfernt)
+    - "echo 'packer ALL=(ALL) NOPASSWD: ALL' >> /target/etc/sudoers.d/packer"
+    - "chmod 440 /target/etc/sudoers.d/packer"
+    # QEMU Guest Agent aktivieren
+    - "curtin in-target -- systemctl enable qemu-guest-agent"
