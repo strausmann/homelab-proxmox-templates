@@ -12,9 +12,9 @@ variables:
 # --- Validate Stage ---
 packer_validate:
   stage: validate
-  before_script:
-    - packer init packer/linux/ubuntu-2404/
   script:
+    - cd packer/linux/ubuntu-2404
+    - packer init .
     - |
       packer validate \
         -var "proxmox_url=${PKR_VAR_proxmox_url}" \
@@ -25,7 +25,7 @@ packer_validate:
         -var "vm_storage_pool=${PKR_VAR_vm_storage_pool:-nvme}" \
         -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
         -var "iso_file=${PKR_VAR_iso_file:-datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso}" \
-        packer/linux/ubuntu-2404/
+        .
   tags:
     - packer
   rules:
@@ -39,9 +39,9 @@ packer_validate:
 # --- Build Stage ---
 build_ubuntu_2404:
   stage: build
-  before_script:
-    - packer init packer/linux/ubuntu-2404/
   script:
+    - cd packer/linux/ubuntu-2404
+    - packer init .
     - |
       # Versionierte VM-ID und Template-Name
       BUILD_DATE=$(date +%Y%m%d)
@@ -88,14 +88,14 @@ build_ubuntu_2404:
         -var "ci_commit_ref=${CI_COMMIT_REF_NAME}" \
         -var "git_release_tag=${GIT_TAG}" \
         -on-error=cleanup \
-        packer/linux/ubuntu-2404/
+        .
 
       echo ""
       echo "================================================="
       echo "  Template erfolgreich erstellt!"
       echo "  Name:     ${TEMPLATE_NAME}"
       echo "  VM-ID:    ${VM_ID}"
-      echo "  Tags:     latest, os:ubuntu, v:2404, packer"
+      echo "  Tags:     latest, os-ubuntu, v-2404, packer"
       echo "  Release:  ${GITLAB_PROJECT_URL}/-/releases/${GIT_TAG}"
       echo "  Pipeline: ${GITLAB_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}"
       echo "================================================="
