@@ -16,6 +16,20 @@ autoinstall:
     allow-pw: true
     authorized-keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
+  user-data:
+    users:
+      - name: packer
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        lock_passwd: false
+        ssh_authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
+      - name: root
+        ssh_authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
   packages:
     - qemu-guest-agent
     - curl
@@ -43,9 +57,15 @@ autoinstall:
     layout:
       name: lvm
   late-commands:
-    # Packer User Sudo-Rechte (werden im Cleanup wieder entfernt)
-    - "echo 'packer ALL=(ALL) NOPASSWD: ALL' >> /target/etc/sudoers.d/packer"
+    # Packer User Sudo-Rechte (explizit mit tee statt >>)
+    - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
     - "chmod 440 /target/etc/sudoers.d/packer"
+    # Root SSH Keys
+    - "mkdir -p /target/root/.ssh"
+    - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes' >> /target/root/.ssh/authorized_keys"
+    - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann' >> /target/root/.ssh/authorized_keys"
+    - "chmod 700 /target/root/.ssh"
+    - "chmod 600 /target/root/.ssh/authorized_keys"
     # QEMU Guest Agent aktivieren
     - "curtin in-target -- systemctl enable qemu-guest-agent"
     # Timezone setzen
