@@ -1,0 +1,556 @@
+---
+# Vollständiges Onboarding Playbook für die Packer Build-VM (hhbuild01)
+#
+# Setzt eine frische Ubuntu 24.04 VM komplett auf:
+#   - Timezone, Locale, Keyboard (de)
+#   - Basis-Pakete + QEMU Guest Agent
+#   - Build-Disk Verzeichnisse
+#   - Docker CE mit data-root auf Build-Disk
+#   - Packer + Terraform (HashiCorp)
+#   - Ansible (venv)
+#   - GitLab Runner (Shell Executor)
+#   - Tailscale (wird als bereits installiert erwartet)
+#   - PatchMon Agent
+#   - UFW Firewall
+#   - Chrony (NTP)
+#   - SSH Hardening
+#   - Cleanup-Cron
+#
+# Idempotent: Kann mehrfach ausgeführt werden ohne Seiteneffekte.
+#
+# Aufruf:
+#   ansible-playbook -i "172.16.60.200," playbooks/onboard-build-vm.yml \
+#     -u root --private-key ~/.ssh/id_ed25519_homelab_nodes \
+#     -e patchmon_api_id=<ID> -e patchmon_api_key=<KEY>
+- name: Onboarding Build-VM (hhbuild01)
+  hosts: all
+  become: true
+
+  vars:
+    # System
+    timezone: Europe/Berlin
+    locale: de_DE.UTF-8
+    keyboard_layout: de
+    keyboard_model: pc105
+    homelab_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+    # Build-Disk
+    build_mount: /build
+    build_dirs:
+      - iso
+      - packer_cache
+      - output
+      - docker
+      - tmp
+      - gitlab-runner
+      - runner-cache
+    # Packer
+    packer_cache_dir: /build/packer_cache
+    # GitLab Runner
+    gitlab_url: "https://git.strausmann.de"
+    gitlab_runner_builds_dir: /build/gitlab-runner
+    gitlab_runner_cache_dir: /build/runner-cache
+    # PatchMon
+    patchmon_url: "https://patchmon.strausmann.cloud"
+    patchmon_api_id: ""
+    patchmon_api_key: ""
+    # UFW
+    packer_http_port_min: 8000
+    packer_http_port_max: 8100
+    local_subnet: "172.16.60.0/22"
+    # Cleanup
+    iso_retention_days: 30
+    output_retention_days: 7
+
+  tasks:
+    # =========================================================================
+    # Phase 1: System-Grundkonfiguration
+    # =========================================================================
+    - name: Timezone auf {{ timezone }} setzen
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: Deutsche Locale generieren
+      community.general.locale_gen:
+        name: "{{ locale }}"
+        state: present
+
+    - name: Keyboard Layout konfigurieren
+      ansible.builtin.copy:
+        dest: /etc/default/keyboard
+        content: |
+          XKBMODEL="{{ keyboard_model }}"
+          XKBLAYOUT="{{ keyboard_layout }}"
+          XKBVARIANT=""
+          XKBOPTIONS=""
+          BACKSPACE="guess"
+        mode: "0644"
+      notify: Keyboard Config anwenden
+
+    - name: SSH Key für root sicherstellen
+      ansible.posix.authorized_key:
+        user: root
+        key: "{{ homelab_ssh_key }}"
+        state: present
+
+    # =========================================================================
+    # Phase 2: Basis-Pakete
+    # =========================================================================
+    - name: System aktualisieren
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Basis-Pakete installieren
+      ansible.builtin.apt:
+        name:
+          # Essentials
+          - qemu-guest-agent
+          - openssh-server
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - apt-transport-https
+          - software-properties-common
+          # Utilities
+          - curl
+          - wget
+          - vim
+          - htop
+          - jq
+          - unzip
+          - git
+          - tmux
+          - tree
+          - net-tools
+          - dnsutils
+          - iputils-ping
+          # Python (für Ansible)
+          - python3
+          - python3-pip
+          - python3-venv
+          # Security
+          - unattended-upgrades
+          - ufw
+          - fail2ban
+          # Console
+          - console-setup
+          - keyboard-configuration
+          # Filesystem
+          - xfsprogs
+        state: present
+
+    - name: QEMU Guest Agent aktivieren
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
+
+    # =========================================================================
+    # Phase 3: Build-Disk Verzeichnisse
+    # =========================================================================
+    - name: Build-Disk Verzeichnisse erstellen
+      ansible.builtin.file:
+        path: "{{ build_mount }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ build_dirs }}"
+
+    # =========================================================================
+    # Phase 4: Docker CE
+    # =========================================================================
+    - name: Docker GPG Key installieren
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Docker APT Repository hinzufügen
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        state: present
+        filename: docker
+
+    - name: Docker CE installieren
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Docker Daemon Konfiguration (data-root auf Build-Disk)
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "data-root": "{{ build_mount }}/docker",
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            },
+            "storage-driver": "overlay2",
+            "live-restore": true,
+            "default-address-pools": [
+              {"base": "172.20.0.0/14", "size": 24}
+            ],
+            "metrics-addr": "0.0.0.0:9323",
+            "features": {
+              "buildkit": true
+            }
+          }
+        mode: "0644"
+      notify: Docker neustarten
+
+    - name: Docker Service aktivieren
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    # =========================================================================
+    # Phase 5: HashiCorp Tools (Packer + Terraform)
+    # =========================================================================
+    - name: HashiCorp GPG Key installieren
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /usr/share/keyrings/hashicorp-archive-keyring.asc
+        mode: "0644"
+
+    - name: HashiCorp APT Repository hinzufügen
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.asc] https://apt.releases.hashicorp.com noble main"
+        state: present
+        filename: hashicorp
+
+    - name: Packer und Terraform installieren
+      ansible.builtin.apt:
+        name:
+          - packer
+          - terraform
+        state: present
+        update_cache: true
+
+    - name: Packer Cache Verzeichnis auf Build-Disk setzen
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: "^PACKER_CACHE_DIR="
+        line: "PACKER_CACHE_DIR={{ packer_cache_dir }}"
+        state: present
+
+    - name: Packer Proxmox Plugin installieren
+      ansible.builtin.command:
+        cmd: packer plugins install github.com/hashicorp/proxmox
+      environment:
+        PACKER_CACHE_DIR: "{{ packer_cache_dir }}"
+      register: packer_proxmox
+      changed_when: "'Installed' in packer_proxmox.stdout"
+
+    - name: Packer Ansible Plugin installieren
+      ansible.builtin.command:
+        cmd: packer plugins install github.com/hashicorp/ansible
+      environment:
+        PACKER_CACHE_DIR: "{{ packer_cache_dir }}"
+      register: packer_ansible
+      changed_when: "'Installed' in packer_ansible.stdout"
+
+    - name: Packer Version prüfen
+      ansible.builtin.command: packer version
+      register: packer_version
+      changed_when: false
+
+    - name: Terraform Version prüfen
+      ansible.builtin.command: terraform version -json
+      register: terraform_version
+      changed_when: false
+
+    - name: HashiCorp Versionen ausgeben
+      ansible.builtin.debug:
+        msg: |
+          Packer: {{ packer_version.stdout }}
+          Terraform: {{ (terraform_version.stdout | from_json).terraform_version }}
+
+    # =========================================================================
+    # Ansible (via pip in venv)
+    # =========================================================================
+    - name: Ansible venv erstellen
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/ansible-venv
+        creates: /opt/ansible-venv/bin/activate
+
+    - name: Ansible in venv installieren
+      ansible.builtin.pip:
+        name:
+          - ansible
+          - pywinrm
+        virtualenv: /opt/ansible-venv
+        state: present
+
+    - name: Ansible in PATH verfügbar machen
+      ansible.builtin.file:
+        src: /opt/ansible-venv/bin/ansible
+        dest: /usr/local/bin/ansible
+        state: link
+
+    - name: Ansible-playbook in PATH verfügbar machen
+      ansible.builtin.file:
+        src: /opt/ansible-venv/bin/ansible-playbook
+        dest: /usr/local/bin/ansible-playbook
+        state: link
+
+    - name: Ansible Galaxy Collections installieren
+      ansible.builtin.command:
+        cmd: /opt/ansible-venv/bin/ansible-galaxy collection install ansible.windows community.windows community.general community.docker ansible.posix
+      register: galaxy_install
+      changed_when: "'Installing' in galaxy_install.stdout"
+
+    # =========================================================================
+    # GitLab Runner
+    # =========================================================================
+    - name: GitLab Runner GPG Key installieren
+      ansible.builtin.get_url:
+        url: https://packages.gitlab.com/runner/gitlab-runner/gpgkey
+        dest: /usr/share/keyrings/gitlab-runner-archive-keyring.asc
+        mode: "0644"
+
+    - name: GitLab Runner APT Repository hinzufügen
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/gitlab-runner-archive-keyring.asc] https://packages.gitlab.com/runner/gitlab-runner/ubuntu/ noble main"
+        state: present
+        filename: gitlab-runner
+
+    - name: GitLab Runner installieren
+      ansible.builtin.apt:
+        name: gitlab-runner
+        state: present
+        update_cache: true
+
+    - name: GitLab Runner Verzeichnisse erstellen
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: gitlab-runner
+        group: gitlab-runner
+        mode: "0755"
+      loop:
+        - "{{ gitlab_runner_builds_dir }}"
+        - "{{ gitlab_runner_cache_dir }}"
+
+    - name: gitlab-runner User zur Docker-Gruppe hinzufügen
+      ansible.builtin.user:
+        name: gitlab-runner
+        groups: docker
+        append: true
+
+    - name: GitLab Runner Version anzeigen
+      ansible.builtin.command: gitlab-runner --version
+      register: runner_version
+      changed_when: false
+
+    - name: Runner Version ausgeben
+      ansible.builtin.debug:
+        msg: "{{ runner_version.stdout_lines[0] }}"
+
+    - name: Hinweis zur Runner-Registrierung
+      ansible.builtin.debug:
+        msg: |
+          GitLab Runner ist installiert aber noch NICHT registriert.
+          Registrierung manuell durchführen:
+            gitlab-runner register \
+              --url {{ gitlab_url }} \
+              --token <RUNNER_AUTH_TOKEN> \
+              --executor shell \
+              --tag-list "packer,terraform" \
+              --name "hhbuild01-packer" \
+              --builds-dir {{ gitlab_runner_builds_dir }}
+
+    # =========================================================================
+    # PatchMon Agent
+    # =========================================================================
+    - name: PatchMon Agent installieren
+      ansible.builtin.shell:
+        cmd: |
+          curl -sf "{{ patchmon_url }}/api/v1/hosts/install" \
+            -H "X-API-ID: {{ patchmon_api_id }}" \
+            -H "X-API-KEY: {{ patchmon_api_key }}" | sh
+        creates: /usr/local/bin/patchmon-agent
+      when: patchmon_api_id | length > 0 and patchmon_api_key | length > 0
+
+    - name: PatchMon wird übersprungen (keine Credentials)
+      ansible.builtin.debug:
+        msg: "PatchMon Agent übersprungen — patchmon_api_id und patchmon_api_key nicht gesetzt"
+      when: patchmon_api_id | length == 0
+
+    # =========================================================================
+    # Firewall (UFW)
+    # =========================================================================
+    - name: UFW installiert sicherstellen
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+
+    - name: UFW SSH erlauben
+      community.general.ufw:
+        rule: allow
+        name: OpenSSH
+
+    - name: UFW Tailscale Interface erlauben
+      community.general.ufw:
+        rule: allow
+        interface: tailscale0
+        direction: in
+
+    - name: UFW Packer HTTP-Server erlauben (lokales Subnetz)
+      community.general.ufw:
+        rule: allow
+        proto: tcp
+        from_ip: "{{ local_subnet }}"
+        to_port: "{{ packer_http_port_min }}:{{ packer_http_port_max }}"
+        comment: "Packer HTTP Server fuer Autoinstall"
+
+    - name: UFW Docker Metrics Port erlauben (Tailscale)
+      community.general.ufw:
+        rule: allow
+        proto: tcp
+        interface: tailscale0
+        direction: in
+        to_port: "9323"
+        comment: "Docker Metrics fuer Prometheus"
+
+    - name: UFW aktivieren
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: UFW Status anzeigen
+      ansible.builtin.command: ufw status verbose
+      register: ufw_status
+      changed_when: false
+
+    - name: Firewall Status
+      ansible.builtin.debug:
+        msg: "{{ ufw_status.stdout_lines }}"
+
+    # =========================================================================
+    # Automatische Security-Updates
+    # =========================================================================
+    - name: Automatische Security-Updates konfigurieren
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: "0644"
+
+    # =========================================================================
+    # Cleanup-Cron
+    # =========================================================================
+    - name: Wöchentlicher ISO-Cleanup
+      ansible.builtin.cron:
+        name: "cleanup-old-isos"
+        weekday: "0"
+        hour: "3"
+        minute: "0"
+        job: "find /build/iso -mtime +{{ iso_retention_days }} -delete >> /var/log/build-cleanup.log 2>&1"
+
+    - name: Wöchentlicher Build-Output Cleanup
+      ansible.builtin.cron:
+        name: "cleanup-build-output"
+        weekday: "0"
+        hour: "3"
+        minute: "10"
+        job: "find /build/output -mtime +{{ output_retention_days }} -delete >> /var/log/build-cleanup.log 2>&1"
+
+    - name: Wöchentlicher Docker Prune
+      ansible.builtin.cron:
+        name: "docker-weekly-prune"
+        weekday: "0"
+        hour: "3"
+        minute: "20"
+        job: "docker system prune -af --volumes --filter 'until=168h' >> /var/log/build-cleanup.log 2>&1"
+
+    - name: Stündlicher Buildx Cleanup Script erstellen
+      ansible.builtin.copy:
+        dest: /usr/local/bin/cleanup_buildx.sh
+        mode: "0755"
+        # raw/endraw verhindert dass Ansible die Docker Go-Templates interpretiert
+        content: "{% raw %}#!/bin/bash\n# Verwaiste buildx-Container nach 6 Stunden entfernen\ncurrent_time=$(date +%s)\ndocker ps --filter \"name=buildx_buildkit_job\" --format \"{{.ID}} {{.Names}}\" | while read -r id name; do\n  [ -z \"$id\" ] && continue\n  start_time=$(docker inspect --format '{{.State.StartedAt}}' \"$id\" | cut -d. -f1)\n  start_epoch=$(date -d \"$start_time\" +%s 2>/dev/null || echo 0)\n  runtime_hours=$(( (current_time - start_epoch) / 3600 ))\n  if (( runtime_hours > 6 )); then\n    echo \"$(date): Entferne $name ($id) — ${runtime_hours}h alt\"\n    docker stop \"$id\" && docker rm \"$id\"\n  fi\ndone\n# Verwaiste buildx Volumes\ndocker volume ls --filter \"name=buildx_buildkit_job\" -q | while read -r vol; do\n  docker volume rm \"$vol\" 2>/dev/null && echo \"$(date): Volume entfernt: $vol\"\ndone\n{% endraw %}"
+
+    - name: Buildx Cleanup Cron
+      ansible.builtin.cron:
+        name: "buildx-cleanup"
+        minute: "0"
+        job: "/usr/local/bin/cleanup_buildx.sh >> /var/log/buildx-cleanup.log 2>&1"
+
+    # =========================================================================
+    # NTP (Chrony)
+    # =========================================================================
+    - name: Chrony installieren
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+
+    - name: Chrony aktivieren
+      ansible.builtin.systemd:
+        name: chrony
+        enabled: true
+        state: started
+
+    # =========================================================================
+    # SSH Hardening
+    # =========================================================================
+    - name: SSH Passwort-Login deaktivieren
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+      notify: SSH neustarten
+
+    # =========================================================================
+    # Zusammenfassung
+    # =========================================================================
+    - name: Installierte Versionen sammeln
+      ansible.builtin.shell: |
+        echo "=== hhbuild01 Onboarding abgeschlossen ==="
+        echo "Packer:     $(packer version | head -1)"
+        echo "Terraform:  $(terraform version | head -1)"
+        echo "Ansible:    $(/opt/ansible-venv/bin/ansible --version | head -1)"
+        echo "Docker:     $(docker version --format {% raw %}'Server: {{.Server.Version}}'{% endraw %})"
+        echo "GitLab Run: $(gitlab-runner --version | head -1)"
+        echo "Tailscale:  $(tailscale version | head -1)"
+        echo "Chrony:     $(chronyc tracking | head -1)"
+        echo "UFW:        $(ufw status | head -1)"
+        echo ""
+        echo "=== Disk Usage ==="
+        df -h / /build
+        echo ""
+        echo "=== Naechster Schritt ==="
+        echo "GitLab Runner registrieren:"
+        echo "  gitlab-runner register --url https://git.strausmann.de --token TOKEN --executor shell --tag-list packer,terraform --name hhbuild01-packer --builds-dir /build/gitlab-runner"
+      register: summary
+      changed_when: false
+
+    - name: Zusammenfassung
+      ansible.builtin.debug:
+        msg: "{{ summary.stdout_lines }}"
+
+  handlers:
+    - name: SSH neustarten
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted
+
+    - name: Docker neustarten
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
+    - name: Keyboard Config anwenden
+      ansible.builtin.command: dpkg-reconfigure -f noninteractive keyboard-configuration
+      changed_when: true
