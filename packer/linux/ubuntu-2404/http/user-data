@@ -41,7 +41,12 @@ autoinstall:
   network:
     ethernets:
       ens18:
-        dhcp4: true
+        dhcp4: false
+        addresses:
+          - 172.16.60.250/22
+        routes:
+          - to: default
+            via: 172.16.60.1
         nameservers:
           addresses:
             - 172.16.60.1
