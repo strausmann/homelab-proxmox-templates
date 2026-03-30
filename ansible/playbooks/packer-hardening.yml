@@ -35,6 +35,8 @@
           - lsb-release
           - cloud-init
           - openssh-server
+          - console-setup
+          - keyboard-configuration
         state: present
 
     # --- QEMU Guest Agent ---
@@ -54,6 +56,33 @@
       community.general.locale_gen:
         name: de_DE.UTF-8
         state: present
+
+    # --- Keyboard Layout: DE ---
+    - name: Keyboard Layout auf DE setzen
+      ansible.builtin.copy:
+        dest: /etc/default/keyboard
+        content: |
+          XKBMODEL="pc105"
+          XKBLAYOUT="de"
+          XKBVARIANT=""
+          XKBOPTIONS=""
+          BACKSPACE="guess"
+        mode: "0644"
+      notify: Keyboard Config anwenden
+
+    - name: Console Keymap auf DE setzen
+      ansible.builtin.debconf:
+        name: keyboard-configuration
+        question: keyboard-configuration/layoutcode
+        value: de
+        vtype: string
+
+    - name: Console Charmap UTF-8
+      ansible.builtin.debconf:
+        name: console-setup
+        question: console-setup/charmap47
+        value: UTF-8
+        vtype: select
 
     # --- SSH Hardening ---
     - name: SSH Passwort-Login deaktivieren
@@ -98,3 +127,8 @@
       ansible.builtin.apt:
         clean: true
       when: packer_build | bool
+
+  handlers:
+    - name: Keyboard Config anwenden
+      ansible.builtin.command: dpkg-reconfigure -f noninteractive keyboard-configuration
+      changed_when: true
