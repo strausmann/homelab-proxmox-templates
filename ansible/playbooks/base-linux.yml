@@ -6,7 +6,9 @@
   become: true
 
   vars:
-    homelab_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+    homelab_ssh_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
 
   tasks:
     # --- Timezone ---
@@ -21,18 +23,20 @@
         update_cache: true
         cache_valid_time: 3600
 
-    # --- SSH Key sicherstellen ---
-    - name: SSH Key fuer root hinterlegen
+    # --- SSH Keys sicherstellen ---
+    - name: SSH Keys fuer root hinterlegen
       ansible.posix.authorized_key:
         user: root
-        key: "{{ homelab_ssh_key }}"
+        key: "{{ item }}"
         state: present
+      loop: "{{ homelab_ssh_keys }}"
 
-    - name: SSH Key fuer ubuntu User hinterlegen
+    - name: SSH Keys fuer ubuntu User hinterlegen
       ansible.posix.authorized_key:
         user: ubuntu
-        key: "{{ homelab_ssh_key }}"
+        key: "{{ item }}"
         state: present
+      loop: "{{ homelab_ssh_keys }}"
       ignore_errors: true
 
     # --- Tailscale ---
