@@ -149,6 +149,7 @@ source "proxmox-iso" "ubuntu" {
     model    = "virtio"
     bridge   = var.vm_bridge
     firewall = false
+    mtu      = 1500
   }
 
   # Cloud-Init Drive
