@@ -49,6 +49,9 @@ build_ubuntu_2404:
       VM_ID=$((TEMPLATE_BASE_ID + BUILD_NUM))
       TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}"
 
+      # VM-ID in Datei speichern fuer after_script Cleanup
+      echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
+
       # Letzten Git-Tag ermitteln
       GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unreleased")
 
@@ -68,6 +71,8 @@ build_ubuntu_2404:
         echo "WARNUNG: VM-ID ${VM_ID} existiert bereits. Verwende naechste freie ID."
         VM_ID=$((VM_ID + 100))
         TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}-r"
+        # Aktualisierte VM-ID speichern
+        echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
       fi
 
       packer build \
@@ -90,6 +95,9 @@ build_ubuntu_2404:
         -on-error=cleanup \
         .
 
+      # Build erfolgreich — VM-ID Datei entfernen (kein Cleanup noetig)
+      rm -f /tmp/packer-vm-id-${CI_PIPELINE_ID}
+
       echo ""
       echo "================================================="
       echo "  Template erfolgreich erstellt!"
@@ -99,6 +107,32 @@ build_ubuntu_2404:
       echo "  Release:  ${GITLAB_PROJECT_URL}/-/releases/${GIT_TAG}"
       echo "  Pipeline: ${GITLAB_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}"
       echo "================================================="
+  after_script:
+    - |
+      # Cleanup: Verwaiste Build-VM entfernen (bei Abbruch oder Fehler)
+      VM_ID_FILE="/tmp/packer-vm-id-${CI_PIPELINE_ID}"
+      if [ -f "${VM_ID_FILE}" ]; then
+        VM_ID=$(cat "${VM_ID_FILE}")
+        echo "================================================="
+        echo "  CLEANUP: Build wurde abgebrochen oder ist fehlgeschlagen"
+        echo "  Entferne verwaiste VM ${VM_ID} von Proxmox..."
+        echo "================================================="
+        # VM stoppen
+        curl -sfk -X POST \
+          "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/status/stop" \
+          -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" \
+          2>/dev/null || true
+        sleep 5
+        # VM loeschen
+        curl -sfk -X DELETE \
+          "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}?purge=1&destroy-unreferenced-disks=1" \
+          -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" \
+          2>/dev/null || true
+        echo "  VM ${VM_ID} entfernt."
+        rm -f "${VM_ID_FILE}"
+      else
+        echo "Kein Cleanup noetig (Build war erfolgreich oder VM-ID nicht gefunden)."
+      fi
   tags:
     - packer
   rules:
