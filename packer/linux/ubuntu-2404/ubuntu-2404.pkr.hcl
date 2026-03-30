@@ -193,7 +193,7 @@ source "proxmox-iso" "ubuntu" {
     "GitLab Release:  https://git.strausmann.de/strausmann/proxmox-templates/-/releases/${var.git_release_tag}",
     "GitLab Pipeline: https://git.strausmann.de/strausmann/proxmox-templates/-/pipelines/${var.ci_pipeline_id}",
   ])
-  tags = "latest;os:ubuntu;v:2404;packer;build:${formatdate("YYYYMMDD", timestamp())}"
+  tags = "latest;os-ubuntu;v-2404;packer;build-${formatdate("YYYYMMDD", timestamp())}"
 }
 
 build {
