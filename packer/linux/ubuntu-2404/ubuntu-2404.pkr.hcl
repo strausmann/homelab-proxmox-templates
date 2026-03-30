@@ -116,8 +116,24 @@ source "proxmox-iso" "ubuntu" {
   cpu_type        = "host"
   cores           = var.vm_cpu_cores
   memory          = var.vm_memory
+  numa            = true
   os              = "l26"
+  machine         = "q35"
+  bios            = "ovmf"
   scsi_controller = "virtio-scsi-single"
+
+  # EFI Disk (UEFI benötigt EFI-Partition auf Storage)
+  efi_config {
+    efi_storage_pool  = var.vm_storage_pool
+    efi_type          = "4m"
+    pre_enrolled_keys = true
+  }
+
+  # TPM 2.0
+  tpm_config {
+    tpm_storage_pool = var.vm_storage_pool
+    version          = "v2.0"
+  }
 
   disks {
     disk_size    = var.vm_disk_size
