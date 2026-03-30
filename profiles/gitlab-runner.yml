@@ -1,0 +1,13 @@
+# GitLab Runner Profil
+---
+packages:
+  - gitlab-runner
+
+apt_sources:
+  - name: gitlab-runner
+    url: "https://packages.gitlab.com/runner/gitlab-runner/ubuntu"
+    gpg_url: "https://packages.gitlab.com/runner/gitlab-runner/gpgkey"
+    gpg_dest: "/usr/share/keyrings/gitlab-runner.asc"
+    suite: "noble"
+    component: "main"
+    arch: "amd64"

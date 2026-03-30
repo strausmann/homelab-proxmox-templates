@@ -1,0 +1,55 @@
+---
+# Task-Datei: Installiert ein einzelnes Profil
+# Wird von apply-profiles.yml inkludiert
+# Variable: profile_name (z.B. 'docker', 'tailscale')
+
+- name: "Profil {{ profile_name }} laden"
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../profiles/{{ profile_name }}.yml"
+    name: current_profile
+
+- name: "{{ profile_name }}: GPG Keys installieren"
+  ansible.builtin.get_url:
+    url: "{{ item.gpg_url }}"
+    dest: "{{ item.gpg_dest }}"
+    mode: "0644"
+  loop: "{{ current_profile.apt_sources | default([]) }}"
+  when: current_profile.apt_sources is defined and current_profile.apt_sources | length > 0
+
+- name: "{{ profile_name }}: APT Repositories hinzufuegen"
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ item.arch | default('amd64') }} signed-by={{ item.gpg_dest }}] {{ item.url }} {{ item.suite }} {{ item.component }}"
+    state: present
+    filename: "{{ item.name }}"
+  loop: "{{ current_profile.apt_sources | default([]) }}"
+  when: current_profile.apt_sources is defined and current_profile.apt_sources | length > 0
+
+- name: "{{ profile_name }}: Pakete installieren"
+  ansible.builtin.apt:
+    name: "{{ current_profile.packages | default([]) }}"
+    state: present
+    update_cache: true
+  when: current_profile.packages is defined and current_profile.packages | length > 0
+
+- name: "{{ profile_name }}: Services aktivieren"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ current_profile.services_enable | default([]) }}"
+  when: current_profile.services_enable is defined
+
+- name: "{{ profile_name }}: Docker Daemon Config"
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: "{{ current_profile.docker_daemon_config | to_nice_json }}"
+    mode: "0644"
+  when: current_profile.docker_daemon_config is defined
+  notify: Docker neustarten
+
+- name: "{{ profile_name }}: Docker Stacks Verzeichnis"
+  ansible.builtin.file:
+    path: "{{ current_profile.docker_stacks_dir }}"
+    state: directory
+    mode: "0755"
+  when: current_profile.docker_stacks_dir is defined

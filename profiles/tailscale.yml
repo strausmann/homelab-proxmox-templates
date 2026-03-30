@@ -1,0 +1,16 @@
+# Tailscale-Profil: Mesh-VPN Client
+---
+packages:
+  - tailscale
+
+apt_sources:
+  - name: tailscale
+    url: "https://pkgs.tailscale.com/stable/ubuntu"
+    gpg_url: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+    gpg_dest: "/usr/share/keyrings/tailscale-archive-keyring.gpg"
+    suite: "noble"
+    component: "main"
+    arch: "amd64"
+
+services_enable:
+  - tailscaled

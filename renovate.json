@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": ["renovate::automated", "renovate::dependencies"],
+  "assignees": ["strausmann"],
+  "packageRules": [
+    {
+      "description": "Packer Plugin Versionen",
+      "matchFileNames": ["packer/**/*.pkr.hcl"],
+      "matchDatasources": ["github-releases"],
+      "automerge": false
+    },
+    {
+      "description": "Ubuntu Cloud Image ISO Updates",
+      "matchFileNames": ["packer/**/*.pkrvars.hcl.example"],
+      "automerge": false,
+      "labels": ["iso-update"]
+    },
+    {
+      "description": "Terraform Provider Updates",
+      "matchFileNames": ["terraform/**/*"],
+      "matchDatasources": ["terraform-provider"],
+      "automerge": false
+    },
+    {
+      "description": "Docker Image Referenzen in Profilen",
+      "matchFileNames": ["profiles/**/*"],
+      "automerge": false,
+      "labels": ["profile-update"]
+    },
+    {
+      "description": "Node.js Dependencies (semantic-release)",
+      "matchManagers": ["npm"],
+      "automerge": true,
+      "labels": ["devdeps"]
+    }
+  ]
+}

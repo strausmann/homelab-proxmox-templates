@@ -1,0 +1,62 @@
+---
+# Wendet Profile auf eine VM an
+# Liest YAML-Profildateien und installiert Pakete + APT Sources
+#
+# Verwendung:
+#   ansible-playbook playbooks/apply-profiles.yml \
+#     -e "profiles=base,tailscale,docker,monitoring"
+- name: Profile anwenden
+  hosts: all
+  become: true
+
+  vars:
+    profiles: "base,tailscale"  # Komma-separierte Liste
+    profiles_dir: "{{ playbook_dir }}/../../profiles"
+
+  tasks:
+    # --- Profile laden ---
+    - name: Profil-Dateien einlesen
+      ansible.builtin.include_vars:
+        file: "{{ profiles_dir }}/{{ item }}.yml"
+        name: "profile_{{ item }}"
+      loop: "{{ profiles.split(',') | map('trim') | list }}"
+
+    # --- APT Sources installieren ---
+    - name: GPG Keys herunterladen
+      ansible.builtin.get_url:
+        url: "{{ item.1.gpg_url }}"
+        dest: "{{ item.1.gpg_dest }}"
+        mode: "0644"
+      loop: "{{ profiles.split(',') | map('trim') | list | map('regex_replace', '^(.*)$', 'profile_\\1') | map('extract', hostvars[inventory_hostname]) | select('mapping') | map(attribute='apt_sources', default=[]) | flatten | zip_longest([], fillvalue={}) | select | list }}"
+      when: false  # Komplexe Iteration — verwende stattdessen den einfachen Ansatz unten
+
+    # --- Einfacher Ansatz: Profile einzeln verarbeiten ---
+    - name: Profil 'base' anwenden
+      ansible.builtin.include_tasks: tasks/install-profile.yml
+      vars:
+        profile_name: base
+      when: "'base' in profiles"
+
+    - name: Profil 'tailscale' anwenden
+      ansible.builtin.include_tasks: tasks/install-profile.yml
+      vars:
+        profile_name: tailscale
+      when: "'tailscale' in profiles"
+
+    - name: Profil 'docker' anwenden
+      ansible.builtin.include_tasks: tasks/install-profile.yml
+      vars:
+        profile_name: docker
+      when: "'docker' in profiles"
+
+    - name: Profil 'gitlab-runner' anwenden
+      ansible.builtin.include_tasks: tasks/install-profile.yml
+      vars:
+        profile_name: gitlab-runner
+      when: "'gitlab-runner' in profiles"
+
+    - name: Profil 'monitoring' anwenden
+      ansible.builtin.include_tasks: tasks/install-profile.yml
+      vars:
+        profile_name: monitoring
+      when: "'monitoring' in profiles"

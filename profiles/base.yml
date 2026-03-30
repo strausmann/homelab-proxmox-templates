@@ -1,0 +1,45 @@
+# Basis-Profil: Wird von ALLEN Templates geladen
+# Pakete und APT-Sources die auf jeder VM installiert werden
+---
+packages:
+  # System-Essentials
+  - qemu-guest-agent
+  - cloud-init
+  - openssh-server
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+  - software-properties-common
+  # Utilities
+  - curl
+  - wget
+  - vim
+  - htop
+  - jq
+  - unzip
+  - git
+  - tmux
+  - tree
+  - net-tools
+  - dnsutils
+  - iputils-ping
+  # Python (fuer Ansible)
+  - python3
+  - python3-pip
+  # Security
+  - unattended-upgrades
+  - ufw
+  - fail2ban
+  # Console
+  - console-setup
+  - keyboard-configuration
+
+apt_sources: []
+  # Keine zusaetzlichen APT-Sources im Base-Profil
+  # Werden in spezifischen Profilen definiert
+
+locale: de_DE.UTF-8
+timezone: Europe/Berlin
+keyboard_layout: de
+keyboard_model: pc105

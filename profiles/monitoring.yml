@@ -1,0 +1,11 @@
+# Monitoring-Profil: PatchMon Agent + Node Exporter
+# PatchMon Agent wird via Onboarding-Script installiert (nicht via APT)
+---
+packages:
+  - prometheus-node-exporter
+
+apt_sources: []
+
+# PatchMon wird post-deploy via Ansible installiert (benoetigt API-Credentials)
+patchmon_url: "https://patchmon.strausmann.cloud"
+patchmon_install_endpoint: "/api/v1/hosts/install"
