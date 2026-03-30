@@ -5,12 +5,9 @@ stages:
   - release
 
 variables:
-  # Proxmox Verbindung (CI/CD Variablen)
-  # PKR_VAR_proxmox_url, PKR_VAR_proxmox_username, PKR_VAR_proxmox_token
-  # PKR_VAR_proxmox_node, PKR_VAR_vm_storage_pool, PKR_VAR_vm_bridge, PKR_VAR_iso_file
   PACKER_CACHE_DIR: /build/packer_cache
-  # Basis VM-ID fuer Templates (wird pro Build inkrementiert)
   TEMPLATE_BASE_ID: "9000"
+  GITLAB_PROJECT_URL: "https://git.strausmann.de/strausmann/proxmox-templates"
 
 # --- Validate Stage ---
 packer_validate:
@@ -52,11 +49,15 @@ build_ubuntu_2404:
       VM_ID=$((TEMPLATE_BASE_ID + BUILD_NUM))
       TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}"
 
+      # Letzten Git-Tag ermitteln
+      GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unreleased")
+
       echo "================================================="
       echo "  Template Build: ${TEMPLATE_NAME}"
       echo "  VM-ID: ${VM_ID}"
-      echo "  Datum: ${BUILD_DATE}"
-      echo "  Pipeline: ${CI_PIPELINE_IID}"
+      echo "  Pipeline: ${CI_PIPELINE_IID} (${CI_PIPELINE_SOURCE})"
+      echo "  Commit: ${CI_COMMIT_SHORT_SHA} (${CI_COMMIT_REF_NAME})"
+      echo "  Release: ${GIT_TAG}"
       echo "================================================="
 
       # Pruefen ob die VM-ID bereits existiert
@@ -66,8 +67,7 @@ build_ubuntu_2404:
       if [ "$HTTP_CODE" = "200" ]; then
         echo "WARNUNG: VM-ID ${VM_ID} existiert bereits. Verwende naechste freie ID."
         VM_ID=$((VM_ID + 100))
-        TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}-retry"
-        echo "Neue VM-ID: ${VM_ID}, Name: ${TEMPLATE_NAME}"
+        TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}-r"
       fi
 
       packer build \
@@ -82,25 +82,29 @@ build_ubuntu_2404:
         -var "vm_id=${VM_ID}" \
         -var "vm_name=ubuntu-2404-packer-${BUILD_NUM}" \
         -var "template_name=${TEMPLATE_NAME}" \
+        -var "ci_pipeline_id=${CI_PIPELINE_ID}" \
+        -var "ci_pipeline_source=${CI_PIPELINE_SOURCE}" \
+        -var "ci_commit_sha=${CI_COMMIT_SHA}" \
+        -var "ci_commit_ref=${CI_COMMIT_REF_NAME}" \
+        -var "git_release_tag=${GIT_TAG}" \
         -on-error=cleanup \
         packer/linux/ubuntu-2404/
 
       echo ""
       echo "================================================="
       echo "  Template erfolgreich erstellt!"
-      echo "  Name: ${TEMPLATE_NAME}"
-      echo "  VM-ID: ${VM_ID}"
-      echo "  Alte Templates koennen manuell geloescht werden"
+      echo "  Name:     ${TEMPLATE_NAME}"
+      echo "  VM-ID:    ${VM_ID}"
+      echo "  Tags:     latest, os:ubuntu, v:2404, packer"
+      echo "  Release:  ${GITLAB_PROJECT_URL}/-/releases/${GIT_TAG}"
+      echo "  Pipeline: ${GITLAB_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}"
       echo "================================================="
   tags:
     - packer
   rules:
-    # Manueller Trigger via Web UI
     - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
-    # Scheduled (monatlich)
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    # Nach Merge auf main wenn sich relevante Dateien geaendert haben
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - packer/linux/ubuntu-2404/**/*
