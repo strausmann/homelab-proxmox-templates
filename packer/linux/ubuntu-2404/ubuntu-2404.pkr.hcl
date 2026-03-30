@@ -116,6 +116,7 @@ source "proxmox-iso" "ubuntu" {
   cpu_type        = "host"
   cores           = var.vm_cpu_cores
   memory          = var.vm_memory
+  balloon_minimum = 0
   numa            = true
   os              = "l26"
   machine         = "q35"
