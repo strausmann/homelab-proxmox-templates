@@ -1,8 +1,8 @@
 # Proxmox Verbindung
-proxmox_url      = "https://hhpve01:8006/api2/json"
+proxmox_url      = "https://PVE1:8006/api2/json"
 proxmox_username = "terraform@pve!terraform-token"
 proxmox_token    = "DEIN_TOKEN_HIER"
-proxmox_node     = "hhpve01"
+proxmox_node     = "PVE1"
 proxmox_skip_tls = true  # Fuer Self-Signed Proxmox Certs
 
 # VM Konfiguration
@@ -13,7 +13,7 @@ vm_cpu_cores     = 2
 vm_memory        = 2048
 vm_disk_size     = "20G"
 vm_storage_pool  = "local-lvm"
-vm_bridge        = "vmbr0"
+vm_bridge        = "vnet60"
 
 # ISO (Ubuntu 24.04.2 LTS)
 iso_url          = "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"

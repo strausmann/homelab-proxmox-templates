@@ -21,7 +21,7 @@ variable "vm_id" {
 
 variable "proxmox_node" {
   type        = string
-  description = "Proxmox Node (z.B. hhpve01)"
+  description = "Proxmox Node (z.B. PVE1)"
 }
 
 variable "template_id" {
@@ -53,7 +53,7 @@ variable "storage_pool" {
 
 variable "network_bridge" {
   type    = string
-  default = "vmbr0"
+  default = "vnet60"
 }
 
 variable "ip_address" {

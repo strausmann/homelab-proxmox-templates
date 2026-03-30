@@ -116,12 +116,12 @@ source "proxmox-iso" "ubuntu" {
   cpu_type        = "host"
   cores           = var.vm_cpu_cores
   memory          = var.vm_memory
-  balloon_minimum = 0
-  numa            = true
-  os              = "l26"
-  machine         = "q35"
-  bios            = "ovmf"
-  scsi_controller = "virtio-scsi-single"
+  ballooning_minimum = 0
+  numa               = true
+  os                 = "l26"
+  machine            = "q35"
+  bios               = "ovmf"
+  scsi_controller    = "virtio-scsi-single"
 
   # EFI Disk (UEFI benötigt EFI-Partition auf Storage)
   efi_config {
@@ -133,7 +133,7 @@ source "proxmox-iso" "ubuntu" {
   # TPM 2.0
   tpm_config {
     tpm_storage_pool = var.vm_storage_pool
-    version          = "v2.0"
+    tpm_version      = "v2.0"
   }
 
   disks {

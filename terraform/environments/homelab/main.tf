@@ -21,7 +21,7 @@ module "runner_build" {
   vm_description = "GitLab Runner fuer Multi-Arch Docker Builds"
   vm_tags        = ["terraform", "linux", "gitlab-runner", "docker"]
 
-  proxmox_node = "hhpve01"
+  proxmox_node = "PVE1"
   template_id  = 9000  # tmpl-ubuntu-2404
 
   cpu_cores    = 4
@@ -30,7 +30,7 @@ module "runner_build" {
   storage_pool = "local-lvm"
 
   ip_address    = "dhcp"
-  dns_servers   = ["10.1.0.1"]
+  dns_servers   = ["172.16.60.1"]
   search_domain = "home.lab"
 
   ci_user  = "ubuntu"
@@ -45,7 +45,7 @@ module "runner_ci" {
   vm_description = "GitLab Runner fuer CI Jobs (ionCube, MegaLinter)"
   vm_tags        = ["terraform", "linux", "gitlab-runner", "docker"]
 
-  proxmox_node = "hhpve01"
+  proxmox_node = "PVE1"
   template_id  = 9000
 
   cpu_cores    = 4
@@ -54,7 +54,7 @@ module "runner_ci" {
   storage_pool = "local-lvm"
 
   ip_address    = "dhcp"
-  dns_servers   = ["10.1.0.1"]
+  dns_servers   = ["172.16.60.1"]
   search_domain = "home.lab"
 
   ci_user  = "ubuntu"
