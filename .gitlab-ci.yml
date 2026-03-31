@@ -109,7 +109,7 @@ variables:
         -var "ci_commit_sha=${CI_COMMIT_SHA}" \
         -var "ci_commit_ref=${CI_COMMIT_REF_NAME}" \
         -var "git_release_tag=${GIT_TAG}" \
-        -on-error=cleanup \
+        -on-error=${PACKER_ON_ERROR:-cleanup} \
         .
 
       # Build erfolgreich — Template-Hardware auf Defaults zuruecksetzen
@@ -443,6 +443,7 @@ build_windows_11:
     TEMPLATE_VERSION: "11"
     TEMPLATE_BASE_ID: "9300"
     DEFAULT_ISO_FILE: "datacenter:iso/Win11_DE_x64.iso"
+    PACKER_ON_ERROR: "abort"
   timeout: 120 minutes
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"

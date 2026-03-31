@@ -271,9 +271,6 @@ build {
   name    = "windows-11"
   sources = ["source.proxmox-iso.windows"]
 
-  # VM bei Fehler NICHT loeschen — erleichtert Debugging ueber Proxmox Console
-  on_error = "abort"
-
   # 1. VirtIO Guest Tools installieren (QEMU Guest Agent)
   provisioner "powershell" {
     script = "scripts/install-virtio-guest.ps1"
