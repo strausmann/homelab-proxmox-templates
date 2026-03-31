@@ -234,7 +234,7 @@ source "proxmox-iso" "ubuntu-docker" {
     "- [GitLab Release](https://git.strausmann.de/strausmann/proxmox-templates/-/releases/${var.git_release_tag})",
     "- [GitLab Pipeline](https://git.strausmann.de/strausmann/proxmox-templates/-/pipelines/${var.ci_pipeline_id})",
   ])
-  tags = "os-ubuntu;v-2404;docker;packer;build-${formatdate("YYYYMMDD", timestamp())}"
+  tags = "os-ubuntu;v-2404;docker;packer;building;build-${formatdate("YYYYMMDD", timestamp())}"
 }
 
 build {

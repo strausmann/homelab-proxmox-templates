@@ -489,6 +489,38 @@
         job: "/usr/local/bin/cleanup_buildx.sh >> /var/log/buildx-cleanup.log 2>&1"
 
     # =========================================================================
+    # Packer Zombie Watchdog
+    # =========================================================================
+    - name: Packer Zombie Watchdog Script deployen
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../scripts/cleanup-packer-zombies.sh"
+        dest: /usr/local/bin/cleanup-packer-zombies.sh
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Packer API Token Datei pruefen
+      ansible.builtin.stat:
+        path: /etc/packer-token
+      register: packer_token_file
+
+    - name: Hinweis wenn Packer Token fehlt
+      ansible.builtin.debug:
+        msg: |
+          WARNUNG: /etc/packer-token existiert noch nicht!
+          Manuell anlegen:
+            echo '<PACKER_TOKEN_SECRET>' > /etc/packer-token
+            chmod 600 /etc/packer-token
+            chown root:root /etc/packer-token
+      when: not packer_token_file.stat.exists
+
+    - name: Packer Zombie Watchdog Cron (alle 15 Minuten)
+      ansible.builtin.cron:
+        name: "packer-zombie-watchdog"
+        minute: "*/15"
+        job: "/usr/local/bin/cleanup-packer-zombies.sh >> /var/log/packer-watchdog.log 2>&1"
+
+    # =========================================================================
     # NTP (Chrony)
     # =========================================================================
     - name: Chrony installieren

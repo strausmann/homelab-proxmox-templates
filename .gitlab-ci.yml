@@ -173,12 +173,12 @@ variables:
         -H "${PVE_AUTH}" | jq -r '.data.tags // ""')
       echo "  Neue Template Tags: ${NEW_TAGS}"
 
-      # 2. latest Tag hinzufuegen
-      NEW_TAGS_WITH_LATEST="${NEW_TAGS};latest"
+      # 2. latest Tag hinzufuegen und building Tag entfernen (Build ist fertig)
+      FINAL_TAGS=$(echo "${NEW_TAGS};latest" | sed 's/;building//g; s/building;//g')
       curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${VM_ID}/config" \
         -H "${PVE_AUTH}" \
-        -d "tags=${NEW_TAGS_WITH_LATEST}" || true
-      echo "  latest Tag auf VM ${VM_ID} gesetzt"
+        -d "tags=${FINAL_TAGS}" || true
+      echo "  latest Tag gesetzt, building Tag entfernt auf VM ${VM_ID}"
 
       # 3. Alle anderen VMs mit latest + os-${TEMPLATE_OS} Tag finden und latest entfernen
       for OLD_VMID in $(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu" \
