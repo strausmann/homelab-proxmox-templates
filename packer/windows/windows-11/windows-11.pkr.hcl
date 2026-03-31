@@ -155,7 +155,7 @@ source "proxmox-iso" "windows" {
     type             = "sata"
     index            = "1"
     iso_checksum     = "none"
-    iso_storage_pool = "local"
+    iso_storage_pool = "datacenter"
   }
 
   # Hardware
