@@ -72,7 +72,7 @@ variable "vm_bridge" {
 }
 variable "iso_file" {
   type        = string
-  description = "Proxmox Storage-Pfad zur Windows ISO (z.B. datacenter:iso/Win11_DE_x64.iso)"
+  description = "Proxmox Storage-Pfad zur Windows ISO (z.B. datacenter:iso/Win11_25H2_German_x64_v2.iso)"
 }
 variable "virtio_iso_file" {
   type        = string
@@ -129,6 +129,10 @@ source "proxmox-iso" "windows" {
 
   vm_id   = var.vm_id
   vm_name = var.vm_name
+
+  # Boot-Reihenfolge: CD-ROM (ide2) VOR Festplatte (scsi0)
+  # Ohne explizite Boot Order bootet UEFI von scsi0 und verpasst die ISO-Installation
+  boot = "order=ide2;scsi0;net0"
 
   # Boot-ISO: Windows 11 Installationsmedium
   boot_iso {
