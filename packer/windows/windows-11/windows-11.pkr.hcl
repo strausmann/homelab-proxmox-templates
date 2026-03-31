@@ -212,9 +212,12 @@ source "proxmox-iso" "windows" {
 
   # Boot-Konfiguration
   # Windows-Installer findet Autounattend.xml automatisch auf den gemounteten ISOs
-  # boot_command wird nicht benoetigt (kein "Press any key" bei UEFI Boot)
-  boot_wait = "5s"
-  boot_command = ["<spacebar>"]
+  # UEFI Boot: "Press any key to boot from CD" erfordert Tastendruck
+  # boot_wait muss lang genug sein damit die Meldung erscheint
+  boot_wait = "3s"
+  boot_command = [
+    "<spacebar><wait><spacebar><wait><spacebar><wait><spacebar><wait><spacebar>"
+  ]
 
   # WinRM Communicator (statt SSH)
   communicator   = "winrm"
