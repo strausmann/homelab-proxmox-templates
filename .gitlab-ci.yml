@@ -37,6 +37,7 @@ variables:
   tags:
     - packer
   timeout: 90 minutes
+  resource_group: packer_build_${TEMPLATE_OS}_${TEMPLATE_VERSION}
   script:
     - cd ${PACKER_DIR}
     - packer init .
@@ -99,7 +100,7 @@ variables:
         -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
         -var "iso_file=${PKR_VAR_iso_file:-${DEFAULT_ISO_FILE}}" \
         -var "vm_id=${VM_ID}" \
-        -var "vm_name=${TEMPLATE_OS}-${TEMPLATE_VERSION}-packer-${BUILD_NUM}" \
+        -var "vm_name=${TEMPLATE_OS}-${TEMPLATE_VERSION}-packer-${CI_PIPELINE_ID}" \
         -var "template_name=${TEMPLATE_NAME}" \
         -var "vm_cpu_cores=6" \
         -var "vm_memory=8192" \
@@ -141,7 +142,7 @@ variables:
         VM_NAME=$(curl -sfk "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/config" \
           -H "${PVE_AUTH}" 2>/dev/null | jq -r '.data.name // ""')
 
-        if echo "${VM_NAME}" | grep -q "packer-${CI_PIPELINE_IID}"; then
+        if echo "${VM_NAME}" | grep -q "packer-${CI_PIPELINE_ID}"; then
           echo "================================================="
           echo "  CLEANUP: Build abgebrochen/fehlgeschlagen"
           echo "  Entferne eigene VM ${VM_ID} (${VM_NAME})..."
