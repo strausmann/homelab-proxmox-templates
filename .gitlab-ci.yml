@@ -36,6 +36,7 @@ variables:
   stage: build
   tags:
     - packer
+  timeout: 90 minutes
   script:
     - cd ${PACKER_DIR}
     - packer init .
@@ -129,26 +130,33 @@ variables:
       echo "================================================="
   after_script:
     - |
-      # Cleanup: Verwaiste Build-VM entfernen (bei Abbruch oder Fehler)
+      # Cleanup: NUR die eigene Build-VM entfernen (bei Abbruch oder Fehler)
+      # WICHTIG: Nie fremde VMs loeschen — nur die VM-ID aus der eigenen Datei
       VM_ID_FILE="/tmp/packer-vm-id-${CI_PIPELINE_ID}"
       if [ -f "${VM_ID_FILE}" ]; then
         VM_ID=$(cat "${VM_ID_FILE}")
-        echo "================================================="
-        echo "  CLEANUP: Build wurde abgebrochen oder ist fehlgeschlagen"
-        echo "  Entferne verwaiste VM ${VM_ID} von Proxmox..."
-        echo "================================================="
-        # VM stoppen
-        curl -sfk -X POST \
-          "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/status/stop" \
-          -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" \
-          2>/dev/null || true
-        sleep 5
-        # VM loeschen
-        curl -sfk -X DELETE \
-          "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}?purge=1&destroy-unreferenced-disks=1" \
-          -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" \
-          2>/dev/null || true
-        echo "  VM ${VM_ID} entfernt."
+
+        # Sicherheitscheck: VM-Name muss zum eigenen Pipeline-IID passen
+        PVE_AUTH="Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}"
+        VM_NAME=$(curl -sfk "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/config" \
+          -H "${PVE_AUTH}" 2>/dev/null | jq -r '.data.name // ""')
+
+        if echo "${VM_NAME}" | grep -q "packer-${CI_PIPELINE_IID}"; then
+          echo "================================================="
+          echo "  CLEANUP: Build abgebrochen/fehlgeschlagen"
+          echo "  Entferne eigene VM ${VM_ID} (${VM_NAME})..."
+          echo "================================================="
+          curl -sfk -X POST \
+            "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/status/stop" \
+            -H "${PVE_AUTH}" 2>/dev/null || true
+          sleep 5
+          curl -sfk -X DELETE \
+            "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}?purge=1&destroy-unreferenced-disks=1" \
+            -H "${PVE_AUTH}" 2>/dev/null || true
+          echo "  VM ${VM_ID} (${VM_NAME}) entfernt."
+        else
+          echo "WARNUNG: VM ${VM_ID} gehoert nicht zu Pipeline ${CI_PIPELINE_IID} (Name: ${VM_NAME}). NICHT geloescht."
+        fi
         rm -f "${VM_ID_FILE}"
       else
         echo "Kein Cleanup noetig (Build war erfolgreich oder VM-ID nicht gefunden)."
