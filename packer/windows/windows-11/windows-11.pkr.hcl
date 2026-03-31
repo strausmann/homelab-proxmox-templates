@@ -212,11 +212,16 @@ source "proxmox-iso" "windows" {
 
   # Boot-Konfiguration
   # Windows-Installer findet Autounattend.xml automatisch auf den gemounteten ISOs
-  # UEFI Boot: "Press any key to boot from CD" erfordert Tastendruck
-  # boot_wait muss lang genug sein damit die Meldung erscheint
-  boot_wait = "3s"
+  # UEFI Boot (OVMF): "Press any key to boot from CD" erfordert Tastendruck
+  #
+  # Timing: OVMF mit Secure Boot (pre_enrolled_keys) braucht ~2-3s fuer POST+TPM-Init.
+  # Danach erscheint "Press any key" fuer ~5 Sekunden.
+  # boot_wait=2s + wiederholte Enter-Keys deckt das Zeitfenster zuverlaessig ab.
+  #
+  # Key: <enter> statt <spacebar> — OVMF VNC akzeptiert Enter zuverlaessiger als Spacebar.
+  boot_wait = "2s"
   boot_command = [
-    "<spacebar><wait><spacebar><wait><spacebar><wait><spacebar><wait><spacebar>"
+    "<enter><wait1s><enter><wait1s><enter><wait1s><enter><wait1s><enter><wait1s><enter>"
   ]
 
   # WinRM Communicator (statt SSH)
