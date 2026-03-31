@@ -223,12 +223,16 @@ build {
   name    = "ubuntu-2404"
   sources = ["source.proxmox-iso.ubuntu"]
 
-  # Warten bis Cloud-Init abgeschlossen
+  # Warten bis Cloud-Init und unattended-upgrades abgeschlossen
   provisioner "shell" {
     inline = [
       "echo Warte auf Cloud-Init...",
       "sudo cloud-init status --wait",
-      "echo Cloud-Init abgeschlossen."
+      "echo Cloud-Init abgeschlossen.",
+      "echo Warte bis apt-Lock frei ist...",
+      "while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do echo '  apt ist noch gesperrt, warte 10s...'; sleep 10; done",
+      "while sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do echo '  apt-lists gesperrt, warte 10s...'; sleep 10; done",
+      "echo apt-Lock ist frei."
     ]
   }
 
