@@ -42,6 +42,5 @@
       }
     ]
   ],
-  "repositoryUrl": "https://git.strausmann.de/strausmann/proxmox-templates.git",
   "tagFormat": "${version}"
 }
