@@ -541,13 +541,14 @@ release:
         -v "${CI_PROJECT_DIR}:/app" \
         -w /app \
         -e HOME=/tmp \
+        -e CI=true \
         -e GL_TOKEN="${GL_TOKEN}" \
         -e GITLAB_URL="${GITLAB_URL}" \
         -e GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME}" \
         -e GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL}" \
         -e GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME}" \
         -e GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL}" \
-        node:22 bash -c "git config --global --add safe.directory /app && git remote set-url origin https://gitlab-ci-token:\${GL_TOKEN}@git.strausmann.de/strausmann/proxmox-templates.git && npm ci --prefer-offline && npx --no-install semantic-release"
+        node:22 bash -c "git config --global --add safe.directory /app && git remote set-url origin \"https://oauth2:\${GL_TOKEN}@git.strausmann.de/strausmann/proxmox-templates.git\" && npm ci --prefer-offline && npx --no-install semantic-release"
   tags:
     - packer
   rules:
