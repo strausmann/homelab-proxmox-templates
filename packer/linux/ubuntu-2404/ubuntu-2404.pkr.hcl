@@ -227,7 +227,7 @@ build {
   provisioner "shell" {
     inline = [
       "echo Warte auf Cloud-Init...",
-      "cloud-init status --wait",
+      "sudo cloud-init status --wait",
       "echo Cloud-Init abgeschlossen."
     ]
   }
