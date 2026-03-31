@@ -73,8 +73,8 @@ variables:
         TEMPLATE_NAME="tmpl-${TEMPLATE_OS}-${TEMPLATE_VERSION}-${BUILD_DATE}-b${BUILD_NUM}-r"
         # Aktualisierte VM-ID speichern
         echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
-        echo "${VM_ID}" > build-artifacts/vm-id.txt
-        echo "${TEMPLATE_NAME}" > build-artifacts/template-name.txt
+        echo "${VM_ID}" > ${CI_PROJECT_DIR}/build-artifacts/vm-id.txt
+        echo "${TEMPLATE_NAME}" > ${CI_PROJECT_DIR}/build-artifacts/template-name.txt
       fi
 
       packer build \
@@ -134,9 +134,11 @@ variables:
         echo "Kein Cleanup noetig (Build war erfolgreich oder VM-ID nicht gefunden)."
       fi
   artifacts:
+    name: "${TEMPLATE_OS}-${TEMPLATE_VERSION}-build-${CI_PIPELINE_IID}"
     paths:
       - build-artifacts/
-    expire_in: 1 hour
+    expire_in: 1 day
+    when: on_success
 
 # --- Tag-Rotation Base ---
 .tag_rotation_base:
@@ -241,7 +243,9 @@ build_ubuntu_2404:
 
 rotate_latest_ubuntu_2404:
   extends: .tag_rotation_base
-  needs: [build_ubuntu_2404]
+  needs:
+    - job: build_ubuntu_2404
+      artifacts: true
   variables:
     TEMPLATE_OS: ubuntu
     TEMPLATE_VERSION: "2404"
