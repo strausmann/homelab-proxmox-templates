@@ -534,17 +534,18 @@ rotate_latest_ubuntu_2404_docker:
 
 release:
   stage: release
-  image: node:22-slim
-  cache:
-    key:
-      files:
-        - package-lock.json
-    paths:
-      - .npm/
-  before_script:
-    - npm ci --cache .npm --prefer-offline
   script:
-    - npx --no-install semantic-release
+    - |
+      docker run --rm \
+        -v "${CI_PROJECT_DIR}:/app" \
+        -w /app \
+        -e GL_TOKEN="${GL_TOKEN}" \
+        -e GITLAB_URL="${GITLAB_URL}" \
+        -e GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME}" \
+        -e GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL}" \
+        -e GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME}" \
+        -e GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL}" \
+        node:22-slim bash -c "npm ci --prefer-offline && npx --no-install semantic-release"
   tags:
     - packer
   rules:
