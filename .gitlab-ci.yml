@@ -48,9 +48,9 @@ variables:
 
       # VM-ID in Datei speichern fuer after_script Cleanup und deploy Stage
       echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
-      mkdir -p build-artifacts
-      echo "${VM_ID}" > build-artifacts/vm-id.txt
-      echo "${TEMPLATE_NAME}" > build-artifacts/template-name.txt
+      mkdir -p ${CI_PROJECT_DIR}/build-artifacts
+      echo "${VM_ID}" > ${CI_PROJECT_DIR}/build-artifacts/vm-id.txt
+      echo "${TEMPLATE_NAME}" > ${CI_PROJECT_DIR}/build-artifacts/template-name.txt
 
       # Letzten Git-Tag ermitteln
       GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unreleased")
@@ -143,6 +143,9 @@ variables:
   stage: deploy
   tags:
     - packer
+  environment:
+    name: templates/${TEMPLATE_OS}-${TEMPLATE_VERSION}
+    action: start
   script:
     - |
       # VM-ID und Template-Name aus Build-Artefakten lesen
