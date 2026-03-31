@@ -43,8 +43,31 @@ variables:
       # Versionierte VM-ID und Template-Name
       BUILD_DATE=$(date +%Y%m%d)
       BUILD_NUM=${CI_PIPELINE_IID:-1}
-      VM_ID=$((TEMPLATE_BASE_ID + BUILD_NUM))
       TEMPLATE_NAME="tmpl-${TEMPLATE_OS}-${TEMPLATE_VERSION}-${BUILD_DATE}-b${BUILD_NUM}"
+
+      # Naechste freie VM-ID im Bereich TEMPLATE_BASE_ID bis TEMPLATE_BASE_ID+99 finden
+      PVE_AUTH="Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}"
+      PVE_NODE="${PKR_VAR_proxmox_node:-PVE1}"
+      RANGE_START=${TEMPLATE_BASE_ID}
+      RANGE_END=$((TEMPLATE_BASE_ID + 99))
+
+      # Alle belegten VM-IDs im Range abfragen
+      USED_IDS=$(curl -sfk "${PKR_VAR_proxmox_url}/nodes/${PVE_NODE}/qemu" \
+        -H "${PVE_AUTH}" | jq -r "[.data[].vmid | select(. >= ${RANGE_START} and . <= ${RANGE_END})] | sort | .[]")
+
+      # Naechste freie ID finden
+      VM_ID=""
+      for ID in $(seq ${RANGE_START} ${RANGE_END}); do
+        if ! echo "${USED_IDS}" | grep -q "^${ID}$"; then
+          VM_ID=${ID}
+          break
+        fi
+      done
+
+      if [ -z "${VM_ID}" ]; then
+        echo "FEHLER: Keine freie VM-ID im Bereich ${RANGE_START}-${RANGE_END}!"
+        exit 1
+      fi
 
       # VM-ID in Datei speichern fuer after_script Cleanup und deploy Stage
       echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
@@ -57,25 +80,11 @@ variables:
 
       echo "================================================="
       echo "  Template Build: ${TEMPLATE_NAME}"
-      echo "  VM-ID: ${VM_ID}"
+      echo "  VM-ID: ${VM_ID} (Range: ${RANGE_START}-${RANGE_END})"
       echo "  Pipeline: ${CI_PIPELINE_IID} (${CI_PIPELINE_SOURCE})"
       echo "  Commit: ${CI_COMMIT_SHORT_SHA} (${CI_COMMIT_REF_NAME})"
       echo "  Release: ${GIT_TAG}"
       echo "================================================="
-
-      # Pruefen ob die VM-ID bereits existiert
-      HTTP_CODE=$(curl -sfk -o /dev/null -w "%{http_code}" \
-        "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/status/current" \
-        -H "Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}" 2>/dev/null || echo "000")
-      if [ "$HTTP_CODE" = "200" ]; then
-        echo "WARNUNG: VM-ID ${VM_ID} existiert bereits. Verwende naechste freie ID."
-        VM_ID=$((VM_ID + 100))
-        TEMPLATE_NAME="tmpl-${TEMPLATE_OS}-${TEMPLATE_VERSION}-${BUILD_DATE}-b${BUILD_NUM}-r"
-        # Aktualisierte VM-ID speichern
-        echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
-        echo "${VM_ID}" > ${CI_PROJECT_DIR}/build-artifacts/vm-id.txt
-        echo "${TEMPLATE_NAME}" > ${CI_PROJECT_DIR}/build-artifacts/template-name.txt
-      fi
 
       packer build \
         -var "proxmox_url=${PKR_VAR_proxmox_url}" \
@@ -258,6 +267,73 @@ rotate_latest_ubuntu_2404:
         - packer/linux/ubuntu-2404/**/*
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
+      when: manual
+      allow_failure: true
+
+# =============================================================================
+# Ubuntu 24.04 Docker-Node
+# =============================================================================
+
+validate_ubuntu_2404_docker:
+  extends: .packer_validate_base
+  variables:
+    PACKER_DIR: packer/linux/ubuntu-2404-docker
+    TEMPLATE_OS: ubuntu-docker
+    TEMPLATE_VERSION: "2404"
+    DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+      changes:
+        - packer/linux/ubuntu-2404-docker/**/*
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+        - ansible/playbooks/packer-hardening-docker.yml
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+build_ubuntu_2404_docker:
+  extends: .packer_build_base
+  variables:
+    PACKER_DIR: packer/linux/ubuntu-2404-docker
+    TEMPLATE_OS: ubuntu-docker
+    TEMPLATE_VERSION: "2404"
+    TEMPLATE_BASE_ID: "9050"
+    DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/linux/ubuntu-2404-docker/**/*
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+        - ansible/playbooks/packer-hardening-docker.yml
+      when: manual
+      allow_failure: true
+
+rotate_latest_ubuntu_2404_docker:
+  extends: .tag_rotation_base
+  needs:
+    - job: build_ubuntu_2404_docker
+      artifacts: true
+  variables:
+    TEMPLATE_OS: ubuntu-docker
+    TEMPLATE_VERSION: "2404"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/linux/ubuntu-2404-docker/**/*
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+        - ansible/playbooks/packer-hardening-docker.yml
       when: manual
       allow_failure: true
 

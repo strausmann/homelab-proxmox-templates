@@ -1,0 +1,134 @@
+---
+# Ansible Playbook fuer Packer Docker-Node Template
+# Importiert Base-Hardening und fuegt Docker CE + zweite Disk hinzu
+
+# --- Phase 1: Base-Hardening (identisch zum Standard-Template) ---
+- name: Base-Hardening ausfuehren
+  ansible.builtin.import_playbook: packer-hardening.yml
+
+# --- Phase 2+3+4: Docker-Disk + Docker CE + Daemon Config ---
+- name: Docker-Node Setup
+  hosts: all
+  become: true
+  vars:
+    packer_build: false
+    docker_disk_device: /dev/sdb
+    docker_mount_point: /docker
+    docker_daemon_config:
+      data-root: "/docker"
+      log-driver: "json-file"
+      log-opts:
+        max-size: "10m"
+        max-file: "3"
+      storage-driver: "overlay2"
+      live-restore: true
+      default-address-pools:
+        - base: "172.20.0.0/14"
+          size: 24
+      metrics-addr: "0.0.0.0:9323"
+      features:
+        buildkit: true
+
+  tasks:
+    # ===========================================
+    # Phase 2: Zweite Disk formatieren und mounten
+    # ===========================================
+    - name: Pruefen ob Docker-Disk vorhanden ist
+      ansible.builtin.stat:
+        path: "{{ docker_disk_device }}"
+      register: docker_disk
+
+    - name: Docker-Disk mit XFS formatieren
+      community.general.filesystem:
+        fstype: xfs
+        dev: "{{ docker_disk_device }}"
+      when: docker_disk.stat.exists
+
+    - name: Mountpoint /docker erstellen
+      ansible.builtin.file:
+        path: "{{ docker_mount_point }}"
+        state: directory
+        mode: "0755"
+
+    - name: Docker-Disk UUID ermitteln
+      ansible.builtin.command: blkid -s UUID -o value {{ docker_disk_device }}
+      register: docker_disk_uuid
+      changed_when: false
+      when: docker_disk.stat.exists
+
+    - name: fstab Eintrag fuer /docker erstellen
+      ansible.posix.mount:
+        path: "{{ docker_mount_point }}"
+        src: "UUID={{ docker_disk_uuid.stdout }}"
+        fstype: xfs
+        opts: defaults,discard,noatime
+        state: mounted
+      when: docker_disk.stat.exists and docker_disk_uuid.stdout | length > 0
+
+    - name: Docker Stacks-Verzeichnis erstellen
+      ansible.builtin.file:
+        path: "{{ docker_mount_point }}/stacks"
+        state: directory
+        mode: "0755"
+
+    # ===========================================
+    # Phase 3: Docker CE installieren
+    # ===========================================
+    - name: Docker GPG Key hinzufuegen
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Docker Repository hinzufuegen
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        state: present
+        filename: docker
+
+    - name: Docker CE installieren
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    # ===========================================
+    # Phase 4: Docker Daemon konfigurieren
+    # ===========================================
+    - name: Docker Konfigurationsverzeichnis erstellen
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        mode: "0755"
+
+    - name: Docker Daemon Konfiguration schreiben
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: "{{ docker_daemon_config | to_nice_json }}"
+        mode: "0644"
+      notify: Docker neustarten
+
+    - name: Docker Service aktivieren und starten
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    # ===========================================
+    # Phase 5: Cleanup (nur im Packer Build)
+    # ===========================================
+    - name: APT Cache leeren
+      ansible.builtin.apt:
+        clean: true
+      when: packer_build | bool
+
+  handlers:
+    - name: Docker neustarten
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
