@@ -86,6 +86,8 @@ variables:
       echo "  Release: ${GIT_TAG}"
       echo "================================================="
 
+      # Build mit mehr Ressourcen (schnellere Paket-Installation)
+      # Template-Defaults (50G Disk, 4 GB RAM, 4 Cores) werden nach Build wiederhergestellt
       packer build \
         -var "proxmox_url=${PKR_VAR_proxmox_url}" \
         -var "proxmox_username=${PKR_VAR_proxmox_username}" \
@@ -98,6 +100,8 @@ variables:
         -var "vm_id=${VM_ID}" \
         -var "vm_name=${TEMPLATE_OS}-${TEMPLATE_VERSION}-packer-${BUILD_NUM}" \
         -var "template_name=${TEMPLATE_NAME}" \
+        -var "vm_cpu_cores=6" \
+        -var "vm_memory=8192" \
         -var "ci_pipeline_id=${CI_PIPELINE_ID}" \
         -var "ci_pipeline_source=${CI_PIPELINE_SOURCE}" \
         -var "ci_commit_sha=${CI_COMMIT_SHA}" \
@@ -105,6 +109,13 @@ variables:
         -var "git_release_tag=${GIT_TAG}" \
         -on-error=cleanup \
         .
+
+      # Build erfolgreich — Template-Hardware auf Defaults zuruecksetzen
+      echo "Template-Hardware auf Defaults setzen (4 Cores, 4 GB RAM)..."
+      PVE_AUTH="Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}"
+      curl -sfk -X POST "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/config" \
+        -H "${PVE_AUTH}" \
+        -d "cores=4&memory=4096" || true
 
       # Build erfolgreich — VM-ID Datei entfernen (kein Cleanup noetig)
       rm -f /tmp/packer-vm-id-${CI_PIPELINE_ID}
@@ -299,7 +310,7 @@ build_ubuntu_2404_docker:
     PACKER_DIR: packer/linux/ubuntu-2404-docker
     TEMPLATE_OS: ubuntu-docker
     TEMPLATE_VERSION: "2404"
-    TEMPLATE_BASE_ID: "9050"
+    TEMPLATE_BASE_ID: "9100"
     DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
@@ -364,7 +375,7 @@ rotate_latest_ubuntu_2404_docker:
 #     PACKER_DIR: packer/linux/debian-12
 #     TEMPLATE_OS: debian
 #     TEMPLATE_VERSION: "12"
-#     TEMPLATE_BASE_ID: "9100"
+#     TEMPLATE_BASE_ID: "9200"
 #     DEFAULT_ISO_FILE: "datacenter:iso/debian-12-amd64-netinst.iso"
 #   rules:
 #     - if: $CI_PIPELINE_SOURCE == "web"
@@ -422,7 +433,7 @@ rotate_latest_ubuntu_2404_docker:
 #     PACKER_DIR: packer/windows/windows-11
 #     TEMPLATE_OS: windows
 #     TEMPLATE_VERSION: "11"
-#     TEMPLATE_BASE_ID: "9200"
+#     TEMPLATE_BASE_ID: "9300"
 #     DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
 #   rules:
 #     - if: $CI_PIPELINE_SOURCE == "web"
@@ -478,7 +489,7 @@ rotate_latest_ubuntu_2404_docker:
 #     PACKER_DIR: packer/windows/windows-server-2025
 #     TEMPLATE_OS: windows-server
 #     TEMPLATE_VERSION: "2025"
-#     TEMPLATE_BASE_ID: "9300"
+#     TEMPLATE_BASE_ID: "9400"
 #     DEFAULT_ISO_FILE: "datacenter:iso/WindowsServer2025_German_x64.iso"
 #   rules:
 #     - if: $CI_PIPELINE_SOURCE == "web"

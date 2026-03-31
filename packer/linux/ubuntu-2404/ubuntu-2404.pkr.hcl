@@ -37,15 +37,15 @@ variable "template_name" {
 }
 variable "vm_cpu_cores" {
   type    = number
-  default = 2
+  default = 4
 }
 variable "vm_memory" {
   type    = number
-  default = 2048
+  default = 4096
 }
 variable "vm_disk_size" {
   type    = string
-  default = "20G"
+  default = "50G"
 }
 variable "vm_storage_pool" {
   type    = string

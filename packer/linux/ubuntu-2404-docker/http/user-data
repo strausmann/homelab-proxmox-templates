@@ -32,7 +32,6 @@ autoinstall:
           - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
   packages:
     - openssh-server
-    - qemu-guest-agent
     - python3
     - cloud-init
     - curl
@@ -66,7 +65,3 @@ autoinstall:
     - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann' >> /target/root/.ssh/authorized_keys"
     - "chmod 700 /target/root/.ssh"
     - "chmod 600 /target/root/.ssh/authorized_keys"
-    # QEMU Guest Agent aktivieren
-    - "curtin in-target -- systemctl enable qemu-guest-agent"
-    # Timezone setzen
-    - "curtin in-target -- timedatectl set-timezone Europe/Berlin"
