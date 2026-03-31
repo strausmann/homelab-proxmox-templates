@@ -140,7 +140,8 @@ source "proxmox-iso" "windows" {
   additional_iso_files {
     iso_file     = var.virtio_iso_file
     unmount      = true
-    device       = "sata0"
+    type         = "sata"
+    index        = "0"
     iso_checksum = "none"
   }
 
@@ -149,10 +150,12 @@ source "proxmox-iso" "windows" {
       "autounattend/Autounattend.xml",
       "scripts/enable-winrm.ps1"
     ]
-    cd_label     = "OEMDRV"
-    unmount      = true
-    device       = "sata1"
-    iso_checksum = "none"
+    cd_label         = "OEMDRV"
+    unmount          = true
+    type             = "sata"
+    index            = "1"
+    iso_checksum     = "none"
+    iso_storage_pool = var.vm_storage_pool
   }
 
   # Hardware
