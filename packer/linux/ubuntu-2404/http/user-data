@@ -32,6 +32,7 @@ autoinstall:
           - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
   packages:
     - openssh-server
+    - qemu-guest-agent
     - python3
     - cloud-init
     - curl
@@ -56,6 +57,8 @@ autoinstall:
     layout:
       name: lvm
   late-commands:
+    # QEMU Guest Agent aktivieren (Packer braucht ihn fuer IP-Erkennung)
+    - "curtin in-target -- systemctl enable qemu-guest-agent"
     # Packer User Sudo-Rechte (explizit mit tee statt >>)
     - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
     - "chmod 440 /target/etc/sudoers.d/packer"
