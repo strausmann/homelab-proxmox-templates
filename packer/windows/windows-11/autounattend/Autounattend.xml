@@ -43,19 +43,48 @@
                xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
-      <!-- VirtIO-Treiber von der zweiten ISO laden -->
+      <!--
+        VirtIO-Treiber von der zweiten ISO laden.
+        Da WinPE die Laufwerksbuchstaben je nach Hardware-Reihenfolge variabel
+        zuweist, werden alle gaengigen Buchstaben (D-F) angegeben.
+        Nicht existierende Pfade werden automatisch uebersprungen.
+      -->
       <DriverPaths>
         <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-          <Path>E:\vioscsi\w11\amd64</Path>
+          <Path>D:\vioscsi\w11\amd64</Path>
         </PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-          <Path>E:\NetKVM\w11\amd64</Path>
+          <Path>D:\NetKVM\w11\amd64</Path>
         </PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-          <Path>E:\Balloon\w11\amd64</Path>
+          <Path>D:\Balloon\w11\amd64</Path>
         </PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+          <Path>D:\viostor\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="5">
+          <Path>E:\vioscsi\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="6">
+          <Path>E:\NetKVM\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="7">
+          <Path>E:\Balloon\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="8">
           <Path>E:\viostor\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="9">
+          <Path>F:\vioscsi\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="10">
+          <Path>F:\NetKVM\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="11">
+          <Path>F:\Balloon\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="12">
+          <Path>F:\viostor\w11\amd64</Path>
         </PathAndCredentials>
       </DriverPaths>
 
@@ -104,13 +133,19 @@
         </Disk>
       </DiskConfiguration>
 
-      <!-- Image-Auswahl: Windows 11 Pro -->
+      <!--
+        Image-Auswahl: Windows 11 Pro (Index 5).
+        ACHTUNG: Die Windows 11 21H2 ISO (Build 22000) verwendet intern
+        "Windows 10 Pro" als IMAGE/NAME — der Display Name ist "Windows 11 Pro".
+        Wir verwenden den stabilen IMAGE/INDEX statt NAME um diese Inkonsistenz
+        zu umgehen und kuenftige ISO-Versionen abzudecken.
+      -->
       <ImageInstall>
         <OSImage>
           <InstallFrom>
             <MetaData wcm:action="add">
-              <Key>/IMAGE/NAME</Key>
-              <Value>Windows 11 Pro</Value>
+              <Key>/IMAGE/INDEX</Key>
+              <Value>5</Value>
             </MetaData>
           </InstallFrom>
           <InstallTo>
@@ -229,10 +264,14 @@
           <CommandLine>powershell.exe -Command "Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Force"</CommandLine>
           <Description>PowerShell Execution Policy setzen</Description>
         </SynchronousCommand>
-        <!-- WinRM-Aktivierungsskript ausfuehren (liegt auf der Autounattend-ISO) -->
+        <!--
+          WinRM-Aktivierungsskript ausfuehren (liegt auf der OEMDRV-ISO).
+          Da der Laufwerksbuchstabe variabel ist, suchen wir das Script auf
+          allen moeglichen Laufwerken (D-G).
+        -->
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
-          <CommandLine>powershell.exe -ExecutionPolicy Bypass -File F:\enable-winrm.ps1</CommandLine>
+          <CommandLine>cmd /c "for %%d in (D E F G) do if exist %%d:\enable-winrm.ps1 powershell.exe -ExecutionPolicy Bypass -File %%d:\enable-winrm.ps1"</CommandLine>
           <Description>WinRM fuer Packer aktivieren</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
