@@ -72,7 +72,7 @@ variable "vm_bridge" {
 }
 variable "iso_file" {
   type        = string
-  description = "Proxmox Storage-Pfad zur Windows ISO (z.B. datacenter:iso/Win11_24H2_German_x64.iso)"
+  description = "Proxmox Storage-Pfad zur Windows ISO (z.B. datacenter:iso/Win11_DE_x64.iso)"
 }
 variable "virtio_iso_file" {
   type        = string
