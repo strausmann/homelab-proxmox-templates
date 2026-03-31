@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Autounattend.xml fuer Windows 11 Pro UEFI-Installation
+
+  Automatisiert die komplette Windows-Installation ohne Benutzerinteraktion:
+  - VirtIO-Treiber laden (SCSI, Netzwerk, Balloon, Storage)
+  - GPT-Partitionierung (EFI + MSR + Windows)
+  - Windows 11 Pro auswaehlen
+  - Lokales Admin-Konto erstellen
+  - OOBE und Microsoft-Account ueberspringen
+  - WinRM fuer Packer-Kommunikation aktivieren
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <!-- ===================================================================== -->
+  <!-- Pass 1: windowsPE — Sprache, Treiber, Partitionierung, Image-Auswahl  -->
+  <!-- ===================================================================== -->
+  <settings pass="windowsPE">
+
+    <!-- Internationale Einstellungen -->
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <SetupUILanguage>
+        <UILanguage>de-DE</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>de-DE</InputLocale>
+      <SystemLocale>de-DE</SystemLocale>
+      <UILanguage>de-DE</UILanguage>
+      <UserLocale>de-DE</UserLocale>
+    </component>
+
+    <!-- Windows Setup: Treiber, Disk-Layout, Image-Auswahl -->
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <!-- VirtIO-Treiber von der zweiten ISO laden -->
+      <DriverPaths>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+          <Path>E:\vioscsi\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+          <Path>E:\NetKVM\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="3">
+          <Path>E:\Balloon\w11\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+          <Path>E:\viostor\w11\amd64</Path>
+        </PathAndCredentials>
+      </DriverPaths>
+
+      <!-- Disk-Konfiguration: GPT fuer UEFI -->
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <!-- Partition 1: EFI System Partition (100 MB) -->
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Size>100</Size>
+              <Type>EFI</Type>
+            </CreatePartition>
+            <!-- Partition 2: Microsoft Reserved (16 MB) -->
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Size>16</Size>
+              <Type>MSR</Type>
+            </CreatePartition>
+            <!-- Partition 3: Windows (Rest der Disk) -->
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Extend>true</Extend>
+              <Type>Primary</Type>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <!-- EFI-Partition formatieren -->
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Format>FAT32</Format>
+              <Label>EFI</Label>
+            </ModifyPartition>
+            <!-- Windows-Partition formatieren -->
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>3</PartitionID>
+              <Format>NTFS</Format>
+              <Label>Windows</Label>
+              <Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+
+      <!-- Image-Auswahl: Windows 11 Pro -->
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>Windows 11 Pro</Value>
+            </MetaData>
+          </InstallFrom>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+        </OSImage>
+      </ImageInstall>
+
+      <!-- Generischer KMS-Client-Key fuer Windows 11 Pro -->
+      <UserData>
+        <ProductKey>
+          <Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+        <AcceptEula>true</AcceptEula>
+      </UserData>
+
+    </component>
+  </settings>
+
+  <!-- ===================================================================== -->
+  <!-- Pass 4: specialize — Computername, Zeitzone, PowerShell Policy        -->
+  <!-- ===================================================================== -->
+  <settings pass="specialize">
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <ComputerName>WIN-PACKER</ComputerName>
+      <TimeZone>W. Europe Standard Time</TimeZone>
+    </component>
+
+    <!-- Remote Desktop aktivieren -->
+    <component name="Microsoft-Windows-TerminalServices-LocalSessionManager"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <fDenyTSConnections>false</fDenyTSConnections>
+    </component>
+
+    <!-- Remote Desktop Firewall-Regel -->
+    <component name="Networking-MPSSVC-Svc"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <FirewallGroups>
+        <FirewallGroup wcm:action="add" wcm:keyValue="RemoteDesktop">
+          <Active>true</Active>
+          <Group>Remotedesktop</Group>
+          <Profile>all</Profile>
+        </FirewallGroup>
+      </FirewallGroups>
+    </component>
+
+  </settings>
+
+  <!-- ===================================================================== -->
+  <!-- Pass 7: oobeSystem — Admin-Konto, OOBE ueberspringen, WinRM          -->
+  <!-- ===================================================================== -->
+  <settings pass="oobeSystem">
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <!-- Administrator-Passwort setzen (nur fuer Build-Prozess) -->
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value>packer-build-only</Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+
+      <!-- Auto-Logon fuer den Build-Prozess -->
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>Administrator</Username>
+        <Password>
+          <Value>packer-build-only</Value>
+          <PlainText>true</PlainText>
+        </Password>
+        <LogonCount>3</LogonCount>
+      </AutoLogon>
+
+      <!-- OOBE komplett ueberspringen (kein Microsoft-Account, keine Datenschutz-Fragen) -->
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+      </OOBE>
+
+      <!-- Erste Anmeldebefehle: PowerShell Execution Policy und WinRM aktivieren -->
+      <FirstLogonCommands>
+        <!-- PowerShell Execution Policy auf Unrestricted setzen -->
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>powershell.exe -Command "Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Force"</CommandLine>
+          <Description>PowerShell Execution Policy setzen</Description>
+        </SynchronousCommand>
+        <!-- WinRM-Aktivierungsskript ausfuehren (liegt auf der Autounattend-ISO) -->
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <CommandLine>powershell.exe -ExecutionPolicy Bypass -File F:\enable-winrm.ps1</CommandLine>
+          <Description>WinRM fuer Packer aktivieren</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+
+    </component>
+
+    <!-- Internationale Einstellungen fuer OOBE -->
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <InputLocale>de-DE</InputLocale>
+      <SystemLocale>de-DE</SystemLocale>
+      <UILanguage>de-DE</UILanguage>
+      <UserLocale>de-DE</UserLocale>
+    </component>
+
+  </settings>
+
+</unattend>

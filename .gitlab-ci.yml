@@ -417,60 +417,60 @@ rotate_latest_ubuntu_2404_docker:
 #       allow_failure: true
 
 # =============================================================================
-# Windows 11 (vorbereitet — Verzeichnis existiert noch nicht)
+# Windows 11
 # =============================================================================
 
-# validate_windows_11:
-#   extends: .packer_validate_base
-#   variables:
-#     PACKER_DIR: packer/windows/windows-11
-#     TEMPLATE_OS: windows
-#     TEMPLATE_VERSION: "11"
-#     DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
-#   rules:
-#     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-#     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
-#       changes:
-#         - packer/windows/windows-11/**/*
-#         - profiles/base.yml
-#     - if: $CI_PIPELINE_SOURCE == "web"
-#     - if: $CI_PIPELINE_SOURCE == "schedule"
+validate_windows_11:
+  extends: .packer_validate_base
+  variables:
+    PACKER_DIR: packer/windows/windows-11
+    TEMPLATE_OS: windows
+    TEMPLATE_VERSION: "11"
+    DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+      changes:
+        - packer/windows/windows-11/**/*
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
 
-# build_windows_11:
-#   extends: .packer_build_base
-#   variables:
-#     PACKER_DIR: packer/windows/windows-11
-#     TEMPLATE_OS: windows
-#     TEMPLATE_VERSION: "11"
-#     TEMPLATE_BASE_ID: "9300"
-#     DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
-#   rules:
-#     - if: $CI_PIPELINE_SOURCE == "web"
-#       when: manual
-#     - if: $CI_PIPELINE_SOURCE == "schedule"
-#     - if: $CI_COMMIT_BRANCH == "main"
-#       changes:
-#         - packer/windows/windows-11/**/*
-#         - profiles/base.yml
-#       when: manual
-#       allow_failure: true
+build_windows_11:
+  extends: .packer_build_base
+  variables:
+    PACKER_DIR: packer/windows/windows-11
+    TEMPLATE_OS: windows
+    TEMPLATE_VERSION: "11"
+    TEMPLATE_BASE_ID: "9300"
+    DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
+  timeout: 120 minutes
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/windows/windows-11/**/*
+      when: manual
+      allow_failure: true
 
-# rotate_latest_windows_11:
-#   extends: .tag_rotation_base
-#   needs: [build_windows_11]
-#   variables:
-#     TEMPLATE_OS: windows
-#     TEMPLATE_VERSION: "11"
-#   rules:
-#     - if: $CI_PIPELINE_SOURCE == "web"
-#       when: manual
-#     - if: $CI_PIPELINE_SOURCE == "schedule"
-#     - if: $CI_COMMIT_BRANCH == "main"
-#       changes:
-#         - packer/windows/windows-11/**/*
-#         - profiles/base.yml
-#       when: manual
-#       allow_failure: true
+rotate_latest_windows_11:
+  extends: .tag_rotation_base
+  needs:
+    - job: build_windows_11
+      artifacts: true
+  variables:
+    TEMPLATE_OS: windows
+    TEMPLATE_VERSION: "11"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/windows/windows-11/**/*
+      when: manual
+      allow_failure: true
 
 # =============================================================================
 # Windows Server 2025 (vorbereitet — Verzeichnis existiert noch nicht)
