@@ -2,18 +2,23 @@
 stages:
   - validate
   - build
+  - deploy
   - release
 
 variables:
   PACKER_CACHE_DIR: /build/packer_cache
-  TEMPLATE_BASE_ID: "9000"
   GITLAB_PROJECT_URL: "https://git.strausmann.de/strausmann/proxmox-templates"
 
-# --- Validate Stage ---
-packer_validate:
+# =============================================================================
+# Hidden Jobs (Base Templates)
+# =============================================================================
+
+.packer_validate_base:
   stage: validate
+  tags:
+    - packer
   script:
-    - cd packer/linux/ubuntu-2404
+    - cd ${PACKER_DIR}
     - packer init .
     - |
       packer validate \
@@ -24,33 +29,28 @@ packer_validate:
         -var "proxmox_skip_tls=true" \
         -var "vm_storage_pool=${PKR_VAR_vm_storage_pool:-nvme}" \
         -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
-        -var "iso_file=${PKR_VAR_iso_file:-datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso}" \
+        -var "iso_file=${PKR_VAR_iso_file:-${DEFAULT_ISO_FILE}}" \
         .
+
+.packer_build_base:
+  stage: build
   tags:
     - packer
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
-      changes:
-        - packer/**/*
-        - profiles/**/*
-        - ansible/**/*
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
-# --- Build Stage ---
-build_ubuntu_2404:
-  stage: build
   script:
-    - cd packer/linux/ubuntu-2404
+    - cd ${PACKER_DIR}
     - packer init .
     - |
       # Versionierte VM-ID und Template-Name
       BUILD_DATE=$(date +%Y%m%d)
       BUILD_NUM=${CI_PIPELINE_IID:-1}
       VM_ID=$((TEMPLATE_BASE_ID + BUILD_NUM))
-      TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}"
+      TEMPLATE_NAME="tmpl-${TEMPLATE_OS}-${TEMPLATE_VERSION}-${BUILD_DATE}-b${BUILD_NUM}"
 
-      # VM-ID in Datei speichern fuer after_script Cleanup
+      # VM-ID in Datei speichern fuer after_script Cleanup und deploy Stage
       echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
+      mkdir -p build-artifacts
+      echo "${VM_ID}" > build-artifacts/vm-id.txt
+      echo "${TEMPLATE_NAME}" > build-artifacts/template-name.txt
 
       # Letzten Git-Tag ermitteln
       GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unreleased")
@@ -70,9 +70,11 @@ build_ubuntu_2404:
       if [ "$HTTP_CODE" = "200" ]; then
         echo "WARNUNG: VM-ID ${VM_ID} existiert bereits. Verwende naechste freie ID."
         VM_ID=$((VM_ID + 100))
-        TEMPLATE_NAME="tmpl-ubuntu-2404-${BUILD_DATE}-b${BUILD_NUM}-r"
+        TEMPLATE_NAME="tmpl-${TEMPLATE_OS}-${TEMPLATE_VERSION}-${BUILD_DATE}-b${BUILD_NUM}-r"
         # Aktualisierte VM-ID speichern
         echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
+        echo "${VM_ID}" > build-artifacts/vm-id.txt
+        echo "${TEMPLATE_NAME}" > build-artifacts/template-name.txt
       fi
 
       packer build \
@@ -83,9 +85,9 @@ build_ubuntu_2404:
         -var "proxmox_skip_tls=true" \
         -var "vm_storage_pool=${PKR_VAR_vm_storage_pool:-nvme}" \
         -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
-        -var "iso_file=${PKR_VAR_iso_file:-datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso}" \
+        -var "iso_file=${PKR_VAR_iso_file:-${DEFAULT_ISO_FILE}}" \
         -var "vm_id=${VM_ID}" \
-        -var "vm_name=ubuntu-2404-packer-${BUILD_NUM}" \
+        -var "vm_name=${TEMPLATE_OS}-${TEMPLATE_VERSION}-packer-${BUILD_NUM}" \
         -var "template_name=${TEMPLATE_NAME}" \
         -var "ci_pipeline_id=${CI_PIPELINE_ID}" \
         -var "ci_pipeline_source=${CI_PIPELINE_SOURCE}" \
@@ -103,8 +105,6 @@ build_ubuntu_2404:
       echo "  Template erfolgreich erstellt!"
       echo "  Name:     ${TEMPLATE_NAME}"
       echo "  VM-ID:    ${VM_ID}"
-      echo "  Tags:     latest, os-ubuntu, v-2404, packer"
-      echo "  Release:  ${GITLAB_PROJECT_URL}/-/releases/${GIT_TAG}"
       echo "  Pipeline: ${GITLAB_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}"
       echo "================================================="
   after_script:
@@ -133,8 +133,97 @@ build_ubuntu_2404:
       else
         echo "Kein Cleanup noetig (Build war erfolgreich oder VM-ID nicht gefunden)."
       fi
+  artifacts:
+    paths:
+      - build-artifacts/
+    expire_in: 1 hour
+
+# --- Tag-Rotation Base ---
+.tag_rotation_base:
+  stage: deploy
   tags:
     - packer
+  script:
+    - |
+      # VM-ID und Template-Name aus Build-Artefakten lesen
+      VM_ID=$(cat build-artifacts/vm-id.txt)
+      TEMPLATE_NAME=$(cat build-artifacts/template-name.txt)
+
+      echo "Tag-Rotation: latest auf VM ${VM_ID} (${TEMPLATE_NAME}) setzen..."
+      PVE_AUTH="Authorization: PVEAPIToken=${PKR_VAR_proxmox_username}=${PKR_VAR_proxmox_token}"
+      PVE_NODE="${PKR_VAR_proxmox_node:-PVE1}"
+      PVE_URL="${PKR_VAR_proxmox_url}"
+
+      # 1. Aktuelle Tags des neuen Templates lesen
+      NEW_TAGS=$(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu/${VM_ID}/config" \
+        -H "${PVE_AUTH}" | jq -r '.data.tags // ""')
+      echo "  Neue Template Tags: ${NEW_TAGS}"
+
+      # 2. latest Tag hinzufuegen
+      NEW_TAGS_WITH_LATEST="${NEW_TAGS};latest"
+      curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${VM_ID}/config" \
+        -H "${PVE_AUTH}" \
+        -d "tags=${NEW_TAGS_WITH_LATEST}" || true
+      echo "  latest Tag auf VM ${VM_ID} gesetzt"
+
+      # 3. Alle anderen VMs mit latest + os-${TEMPLATE_OS} Tag finden und latest entfernen
+      for OLD_VMID in $(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu" \
+        -H "${PVE_AUTH}" | jq -r ".data[] | select(.tags != null) | select(.tags | contains(\"latest\")) | select(.tags | contains(\"os-${TEMPLATE_OS}\")) | .vmid"); do
+        if [ "$OLD_VMID" != "$VM_ID" ]; then
+          OLD_TAGS=$(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu/${OLD_VMID}/config" \
+            -H "${PVE_AUTH}" | jq -r '.data.tags // ""')
+          # latest entfernen
+          CLEANED_TAGS=$(echo "$OLD_TAGS" | sed 's/;latest//g; s/latest;//g; s/^latest$//g')
+          if [ -n "$CLEANED_TAGS" ]; then
+            curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${OLD_VMID}/config" \
+              -H "${PVE_AUTH}" \
+              -d "tags=${CLEANED_TAGS}" || true
+            echo "  latest Tag von VM ${OLD_VMID} entfernt (Tags: ${CLEANED_TAGS})"
+          fi
+        fi
+      done
+
+      GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unreleased")
+
+      echo ""
+      echo "================================================="
+      echo "  Tag-Rotation abgeschlossen!"
+      echo "  Name:     ${TEMPLATE_NAME}"
+      echo "  VM-ID:    ${VM_ID}"
+      echo "  Tags:     latest, os-${TEMPLATE_OS}, v-${TEMPLATE_VERSION}, packer"
+      echo "  Release:  ${GITLAB_PROJECT_URL}/-/releases/${GIT_TAG}"
+      echo "  Pipeline: ${GITLAB_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}"
+      echo "================================================="
+
+# =============================================================================
+# Ubuntu 24.04
+# =============================================================================
+
+validate_ubuntu_2404:
+  extends: .packer_validate_base
+  variables:
+    PACKER_DIR: packer/linux/ubuntu-2404
+    TEMPLATE_OS: ubuntu
+    TEMPLATE_VERSION: "2404"
+    DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+      changes:
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+build_ubuntu_2404:
+  extends: .packer_build_base
+  variables:
+    PACKER_DIR: packer/linux/ubuntu-2404
+    TEMPLATE_OS: ubuntu
+    TEMPLATE_VERSION: "2404"
+    TEMPLATE_BASE_ID: "9000"
+    DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
       when: manual
@@ -147,7 +236,199 @@ build_ubuntu_2404:
       when: manual
       allow_failure: true
 
-# --- Release Stage ---
+rotate_latest_ubuntu_2404:
+  extends: .tag_rotation_base
+  needs: [build_ubuntu_2404]
+  variables:
+    TEMPLATE_OS: ubuntu
+    TEMPLATE_VERSION: "2404"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+      when: manual
+      allow_failure: true
+
+# =============================================================================
+# Debian 12 (vorbereitet — Verzeichnis existiert noch nicht)
+# =============================================================================
+
+# validate_debian_12:
+#   extends: .packer_validate_base
+#   variables:
+#     PACKER_DIR: packer/linux/debian-12
+#     TEMPLATE_OS: debian
+#     TEMPLATE_VERSION: "12"
+#     DEFAULT_ISO_FILE: "datacenter:iso/debian-12-amd64-netinst.iso"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+#       changes:
+#         - packer/linux/debian-12/**/*
+#         - profiles/base.yml
+#         - ansible/playbooks/packer-hardening.yml
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# build_debian_12:
+#   extends: .packer_build_base
+#   variables:
+#     PACKER_DIR: packer/linux/debian-12
+#     TEMPLATE_OS: debian
+#     TEMPLATE_VERSION: "12"
+#     TEMPLATE_BASE_ID: "9100"
+#     DEFAULT_ISO_FILE: "datacenter:iso/debian-12-amd64-netinst.iso"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#       when: manual
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - packer/linux/debian-12/**/*
+#         - profiles/base.yml
+#         - ansible/playbooks/packer-hardening.yml
+#       when: manual
+#       allow_failure: true
+
+# rotate_latest_debian_12:
+#   extends: .tag_rotation_base
+#   needs: [build_debian_12]
+#   variables:
+#     TEMPLATE_OS: debian
+#     TEMPLATE_VERSION: "12"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#       when: manual
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - packer/linux/debian-12/**/*
+#         - profiles/base.yml
+#         - ansible/playbooks/packer-hardening.yml
+#       when: manual
+#       allow_failure: true
+
+# =============================================================================
+# Windows 11 (vorbereitet — Verzeichnis existiert noch nicht)
+# =============================================================================
+
+# validate_windows_11:
+#   extends: .packer_validate_base
+#   variables:
+#     PACKER_DIR: packer/windows/windows-11
+#     TEMPLATE_OS: windows
+#     TEMPLATE_VERSION: "11"
+#     DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+#       changes:
+#         - packer/windows/windows-11/**/*
+#         - profiles/base.yml
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# build_windows_11:
+#   extends: .packer_build_base
+#   variables:
+#     PACKER_DIR: packer/windows/windows-11
+#     TEMPLATE_OS: windows
+#     TEMPLATE_VERSION: "11"
+#     TEMPLATE_BASE_ID: "9200"
+#     DEFAULT_ISO_FILE: "datacenter:iso/Win11_24H2_German_x64.iso"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#       when: manual
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - packer/windows/windows-11/**/*
+#         - profiles/base.yml
+#       when: manual
+#       allow_failure: true
+
+# rotate_latest_windows_11:
+#   extends: .tag_rotation_base
+#   needs: [build_windows_11]
+#   variables:
+#     TEMPLATE_OS: windows
+#     TEMPLATE_VERSION: "11"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#       when: manual
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - packer/windows/windows-11/**/*
+#         - profiles/base.yml
+#       when: manual
+#       allow_failure: true
+
+# =============================================================================
+# Windows Server 2025 (vorbereitet — Verzeichnis existiert noch nicht)
+# =============================================================================
+
+# validate_windows_server_2025:
+#   extends: .packer_validate_base
+#   variables:
+#     PACKER_DIR: packer/windows/windows-server-2025
+#     TEMPLATE_OS: windows-server
+#     TEMPLATE_VERSION: "2025"
+#     DEFAULT_ISO_FILE: "datacenter:iso/WindowsServer2025_German_x64.iso"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+#       changes:
+#         - packer/windows/windows-server-2025/**/*
+#         - profiles/base.yml
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# build_windows_server_2025:
+#   extends: .packer_build_base
+#   variables:
+#     PACKER_DIR: packer/windows/windows-server-2025
+#     TEMPLATE_OS: windows-server
+#     TEMPLATE_VERSION: "2025"
+#     TEMPLATE_BASE_ID: "9300"
+#     DEFAULT_ISO_FILE: "datacenter:iso/WindowsServer2025_German_x64.iso"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#       when: manual
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - packer/windows/windows-server-2025/**/*
+#         - profiles/base.yml
+#       when: manual
+#       allow_failure: true
+
+# rotate_latest_windows_server_2025:
+#   extends: .tag_rotation_base
+#   needs: [build_windows_server_2025]
+#   variables:
+#     TEMPLATE_OS: windows-server
+#     TEMPLATE_VERSION: "2025"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "web"
+#       when: manual
+#     - if: $CI_PIPELINE_SOURCE == "schedule"
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       changes:
+#         - packer/windows/windows-server-2025/**/*
+#         - profiles/base.yml
+#       when: manual
+#       allow_failure: true
+
+# =============================================================================
+# Release Stage (unveraendert)
+# =============================================================================
+
 release:
   stage: release
   image: node:22-slim
