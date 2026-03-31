@@ -223,7 +223,7 @@ source "proxmox-iso" "windows" {
   communicator   = "winrm"
   winrm_username = var.winrm_username
   winrm_password = var.winrm_password
-  winrm_timeout  = "60m"
+  winrm_timeout  = "90m"
   winrm_use_ssl  = false
   winrm_insecure = true
   winrm_port     = 5985
@@ -270,6 +270,9 @@ source "proxmox-iso" "windows" {
 build {
   name    = "windows-11"
   sources = ["source.proxmox-iso.windows"]
+
+  # VM bei Fehler NICHT loeschen — erleichtert Debugging ueber Proxmox Console
+  on_error = "abort"
 
   # 1. VirtIO Guest Tools installieren (QEMU Guest Agent)
   provisioner "powershell" {
