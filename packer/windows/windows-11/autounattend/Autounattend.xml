@@ -52,9 +52,16 @@
         automatisch uebersprungen.
       -->
       <DriverPaths>
+        <!--
+          VirtIO-Win ISO v0.1.285 hat zwei Verzeichnisstrukturen:
+          - amd64/w11/         — vioscsi + viostor (Disk-Treiber)
+          - NetKVM/w11/amd64/  — Netzwerk-Treiber
+          - Balloon/w11/amd64/ — Memory-Balloon-Treiber
+          Alle drei Pfade werden pro Laufwerksbuchstabe angegeben.
+        -->
         <!-- Laufwerk C: -->
         <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-          <Path>C:\vioscsi\w11\amd64</Path>
+          <Path>C:\amd64\w11</Path>
         </PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="2">
           <Path>C:\NetKVM\w11\amd64</Path>
@@ -62,73 +69,55 @@
         <PathAndCredentials wcm:action="add" wcm:keyValue="3">
           <Path>C:\Balloon\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="4">
-          <Path>C:\viostor\w11\amd64</Path>
-        </PathAndCredentials>
         <!-- Laufwerk D: -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="5">
-          <Path>D:\vioscsi\w11\amd64</Path>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+          <Path>D:\amd64\w11</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="6">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="5">
           <Path>D:\NetKVM\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="7">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="6">
           <Path>D:\Balloon\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="8">
-          <Path>D:\viostor\w11\amd64</Path>
-        </PathAndCredentials>
         <!-- Laufwerk E: -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="9">
-          <Path>E:\vioscsi\w11\amd64</Path>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="7">
+          <Path>E:\amd64\w11</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="10">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="8">
           <Path>E:\NetKVM\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="11">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="9">
           <Path>E:\Balloon\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="12">
-          <Path>E:\viostor\w11\amd64</Path>
-        </PathAndCredentials>
         <!-- Laufwerk F: -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="13">
-          <Path>F:\vioscsi\w11\amd64</Path>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="10">
+          <Path>F:\amd64\w11</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="14">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="11">
           <Path>F:\NetKVM\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="15">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="12">
           <Path>F:\Balloon\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="16">
-          <Path>F:\viostor\w11\amd64</Path>
-        </PathAndCredentials>
         <!-- Laufwerk G: -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="17">
-          <Path>G:\vioscsi\w11\amd64</Path>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="13">
+          <Path>G:\amd64\w11</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="18">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="14">
           <Path>G:\NetKVM\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="19">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="15">
           <Path>G:\Balloon\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="20">
-          <Path>G:\viostor\w11\amd64</Path>
-        </PathAndCredentials>
         <!-- Laufwerk H: -->
-        <PathAndCredentials wcm:action="add" wcm:keyValue="21">
-          <Path>H:\vioscsi\w11\amd64</Path>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="16">
+          <Path>H:\amd64\w11</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="22">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="17">
           <Path>H:\NetKVM\w11\amd64</Path>
         </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="23">
+        <PathAndCredentials wcm:action="add" wcm:keyValue="18">
           <Path>H:\Balloon\w11\amd64</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="24">
-          <Path>H:\viostor\w11\amd64</Path>
         </PathAndCredentials>
       </DriverPaths>
 
