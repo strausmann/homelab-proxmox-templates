@@ -14,6 +14,11 @@
     packer_build: false
     docker_disk_device: /dev/sdb
     docker_mount_point: /docker
+    # Docker APT Suite — standardmaessig vom OS erkannt.
+    # Fuer Beta-Releases (z.B. Ubuntu 26.04 resolute) auf den letzten
+    # stabilen Codename setzen, bis Docker offizielle Pakete liefert.
+    # Wird per --extra-vars docker_apt_suite=noble ueberschrieben.
+    docker_apt_suite: "{{ ansible_distribution_release }}"
     docker_daemon_config:
       data-root: "/docker"
       log-driver: "json-file"
@@ -82,7 +87,7 @@
 
     - name: Docker Repository hinzufuegen
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ docker_apt_suite }} stable"
         state: present
         filename: docker
 

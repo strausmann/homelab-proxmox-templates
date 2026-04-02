@@ -1,0 +1,20 @@
+# Ubuntu 26.04 LTS — Beispiel-Variablen fuer lokale Builds
+# Kopieren nach ubuntu-2604.pkrvars.hcl und anpassen
+
+proxmox_url      = "https://172.16.50.8:8006/api2/json"
+proxmox_username = "terraform@pve!homelab"
+proxmox_token    = "DEIN_TOKEN_HIER"
+proxmox_node     = "PVE1"
+proxmox_skip_tls = true
+
+vm_id            = "9600"
+vm_name          = "ubuntu-2604-packer"
+template_name    = "tmpl-ubuntu-2604"
+vm_storage_pool  = "nvme"
+vm_bridge        = "vnet60"
+
+# Beta-ISO (bis 23. April 2026)
+iso_file = "datacenter:iso/ubuntu-26.04-beta-live-server-amd64.iso"
+
+# Final-ISO (ab 23. April 2026)
+# iso_file = "datacenter:iso/ubuntu-26.04-live-server-amd64.iso"
