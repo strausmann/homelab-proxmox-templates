@@ -1,0 +1,27 @@
+# Proxmox Verbindung
+proxmox_url      = "https://PVE1:8006/api2/json"
+proxmox_username = "terraform@pve!terraform-token"
+proxmox_token    = "DEIN_TOKEN_HIER"
+proxmox_node     = "PVE1"
+proxmox_skip_tls = true  # Fuer Self-Signed Proxmox Certs
+
+# VM Konfiguration
+vm_id            = "9050"
+vm_name          = "ubuntu-2404-luks-packer"
+template_name    = "tmpl-ubuntu-2404-luks"
+vm_cpu_cores     = 2
+vm_memory        = 2048
+vm_disk_size     = "20G"
+vm_storage_pool  = "local-lvm"
+vm_bridge        = "vnet60"
+
+# ISO (Ubuntu 24.04 LTS — bereits auf Proxmox hochgeladen)
+iso_file         = "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
+
+# SSH (temporaer fuer Packer Build, wird im Cleanup entfernt)
+ssh_username     = "packer"
+ssh_password     = "packer-build-only"
+
+# LUKS / Tang
+tang_url         = "http://172.16.60.20:7500"
+luks_passphrase  = "packer-build-only"

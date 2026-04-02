@@ -1,0 +1,123 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: de_DE.UTF-8
+  keyboard:
+    layout: de
+    variant: ''
+  timezone: Europe/Berlin
+  identity:
+    hostname: ubuntu-packer-build
+    username: packer
+    # Passwort: packer-build-only (SHA-512)
+    password: "$6$NHXw3k9nzxXpgUlS$fL6YuqnX509A5hp4oaML9HvqrlQicOmQOQjBoyTwVMYbsI2hYx7clG7zlIeP0xbvRzKEQzuWmNTVNm4Qdn5CI/"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
+  user-data:
+    users:
+      - name: packer
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        lock_passwd: false
+        ssh_authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
+      - name: root
+        ssh_authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
+  packages:
+    - openssh-server
+    - qemu-guest-agent
+    - python3
+    - cloud-init
+    - curl
+  package_update: true
+  package_upgrade: true
+  network:
+    ethernets:
+      enp6s18:
+        dhcp4: true
+        mtu: 1500
+        nameservers:
+          addresses:
+            - 172.16.60.1
+            - 1.1.1.1
+    version: 2
+  storage:
+    config:
+      - id: disk0
+        type: disk
+        ptable: gpt
+        grub_device: true
+      - id: esp
+        type: partition
+        device: disk0
+        size: 512M
+        flag: boot
+        grub_device: true
+      - id: esp-format
+        type: format
+        volume: esp
+        fstype: fat32
+      - id: boot-part
+        type: partition
+        device: disk0
+        size: 1G
+      - id: boot-format
+        type: format
+        volume: boot-part
+        fstype: ext4
+      - id: luks-part
+        type: partition
+        device: disk0
+        size: -1
+      - id: luks-crypt
+        type: dm_crypt
+        volume: luks-part
+        dm_name: crypt-root
+        key: packer-build-only
+      - id: vg0
+        type: lvm_volgroup
+        devices: [luks-crypt]
+        name: vg0
+      - id: lv-root
+        type: lvm_partition
+        volgroup: vg0
+        name: root
+        size: -1
+      - id: root-format
+        type: format
+        volume: lv-root
+        fstype: ext4
+      - id: mount-root
+        type: mount
+        device: root-format
+        path: /
+      - id: mount-boot
+        type: mount
+        device: boot-format
+        path: /boot
+      - id: mount-esp
+        type: mount
+        device: esp-format
+        path: /boot/efi
+  late-commands:
+    # QEMU Guest Agent aktivieren (Packer braucht ihn fuer IP-Erkennung)
+    - "curtin in-target -- systemctl enable qemu-guest-agent"
+    # Packer User Sudo-Rechte (explizit mit tee statt >>)
+    - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
+    - "chmod 440 /target/etc/sudoers.d/packer"
+    # Root SSH Keys
+    - "mkdir -p /target/root/.ssh"
+    - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes' >> /target/root/.ssh/authorized_keys"
+    - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann' >> /target/root/.ssh/authorized_keys"
+    - "chmod 700 /target/root/.ssh"
+    - "chmod 600 /target/root/.ssh/authorized_keys"
+    # Netzwerk im initramfs fuer Clevis/Tang (DHCP)
+    - "echo 'DEVICE=enp6s18' >> /target/etc/initramfs-tools/initramfs.conf"
+    - "echo 'IP=dhcp' >> /target/etc/initramfs-tools/initramfs.conf"
