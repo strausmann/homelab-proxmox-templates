@@ -255,24 +255,14 @@ build {
     ]
   }
 
-  # Clevis/Tang Auto-Unlock konfigurieren
+  # Clevis/Tang Verifikation (Binding erfolgt im Autoinstall late-commands)
   provisioner "shell" {
     inline = [
-      "echo '=== Clevis/Tang Setup ==='",
-      "sudo apt-get update",
-      "sudo apt-get install -y clevis clevis-luks clevis-initramfs",
-      "echo 'Clevis installiert, binde an Tang...'",
-      "LUKS_DEV=$$(sudo dmsetup info crypt-root --noheadings -c -o blkdevname 2>/dev/null | awk '{print \"/dev/\"$$1}' | sed 's/[0-9]*$$//' | head -1)",
-      "LUKS_PART=$$(lsblk -rno NAME,TYPE | awk '$$2==\"part\"{print \"/dev/\"$$1}' | while read p; do sudo cryptsetup isLuks \"$$p\" 2>/dev/null && echo \"$$p\"; done | head -1)",
-      "LUKS_DEV=$${LUKS_PART:-/dev/sda3}",
-      "echo 'LUKS Partition erkannt: '$$LUKS_DEV",
-      "ls $$LUKS_DEV || { echo 'FATAL: LUKS Partition nicht gefunden'; exit 1; }",
-      "TANG_THP=$$(curl -sf ${var.tang_url}/adv | python3 -c \"import sys,json,base64,hashlib; adv=json.load(sys.stdin); payload=json.loads(base64.b64decode(adv['payload']+'==').decode()); key=[k for k in payload['keys'] if k.get('alg')=='ES512'][0]; canon=json.dumps({k:key[k] for k in sorted(['crv','kty','x','y']) if k in key},separators=(',',':')); print(base64.urlsafe_b64encode(hashlib.sha256(canon.encode()).digest()).rstrip(b'=').decode())\")",
-      "echo 'Tang Thumbprint: '$$TANG_THP",
-      "echo '${var.luks_passphrase}' | sudo clevis luks bind -d $$LUKS_DEV tang '{\"url\":\"${var.tang_url}\",\"thp\":\"'$$TANG_THP'\"}'",
-      "echo 'Clevis LUKS Bind erfolgreich'",
-      "sudo update-initramfs -u -k all",
-      "echo '=== Clevis/Tang Setup abgeschlossen ==='"
+      "echo '=== Clevis/Tang Verifikation ==='",
+      "sudo clevis luks list -d /dev/sda3 || { echo 'FEHLER: Keine Clevis-Bindung auf /dev/sda3'; exit 1; }",
+      "echo 'Clevis-Bindung verifiziert'",
+      "lsinitramfs /boot/initrd.img-$$(uname -r) | grep -q clevis && echo 'Clevis im initramfs vorhanden' || echo 'WARNUNG: Clevis nicht im initramfs'",
+      "echo '=== Clevis/Tang Verifikation abgeschlossen ==='"
     ]
   }
 
