@@ -395,6 +395,66 @@ rotate_latest_ubuntu_2404_docker:
         - ansible/playbooks/packer-hardening-docker.yml
 
 # =============================================================================
+# Ubuntu 24.04 LUKS (Encrypted OS-Disk + Clevis/Tang)
+# =============================================================================
+
+validate_ubuntu_2404_luks:
+  extends: .packer_validate_base
+  variables:
+    PACKER_DIR: packer/linux/ubuntu-2404-luks
+    TEMPLATE_OS: ubuntu-luks
+    TEMPLATE_VERSION: "2404"
+    DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH
+      changes:
+        - packer/linux/ubuntu-2404-luks/**/*
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+build_ubuntu_2404_luks:
+  extends: .packer_build_base
+  variables:
+    PACKER_DIR: packer/linux/ubuntu-2404-luks
+    TEMPLATE_OS: ubuntu-luks
+    TEMPLATE_VERSION: "2404"
+    TEMPLATE_BASE_ID: "9050"
+    DEFAULT_ISO_FILE: "datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/linux/ubuntu-2404-luks/**/*
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+
+rotate_latest_ubuntu_2404_luks:
+  extends: .tag_rotation_base
+  needs:
+    - job: build_ubuntu_2404_luks
+      artifacts: true
+  variables:
+    TEMPLATE_OS: ubuntu-luks
+    TEMPLATE_VERSION: "2404"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - packer/linux/ubuntu-2404-luks/**/*
+        - packer/linux/ubuntu-2404/**/*
+        - profiles/base.yml
+        - ansible/playbooks/packer-hardening.yml
+
+# =============================================================================
 # Ubuntu 26.04 (Beta — Final Release: 23. April 2026)
 # =============================================================================
 
