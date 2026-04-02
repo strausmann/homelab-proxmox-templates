@@ -432,8 +432,6 @@ build_ubuntu_2604:
         - packer/linux/ubuntu-2604/**/*
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
-      when: manual
-      allow_failure: true
 
 rotate_latest_ubuntu_2604:
   extends: .tag_rotation_base
@@ -452,8 +450,6 @@ rotate_latest_ubuntu_2604:
         - packer/linux/ubuntu-2604/**/*
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
-      when: manual
-      allow_failure: true
 
 # =============================================================================
 # Ubuntu 26.04 Docker-Node (Beta — Final Release: 23. April 2026)
@@ -497,8 +493,6 @@ build_ubuntu_2604_docker:
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
         - ansible/playbooks/packer-hardening-docker.yml
-      when: manual
-      allow_failure: true
 
 rotate_latest_ubuntu_2604_docker:
   extends: .tag_rotation_base
@@ -519,8 +513,6 @@ rotate_latest_ubuntu_2604_docker:
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
         - ansible/playbooks/packer-hardening-docker.yml
-      when: manual
-      allow_failure: true
 
 # =============================================================================
 # Debian 12 (vorbereitet — Verzeichnis existiert noch nicht)
