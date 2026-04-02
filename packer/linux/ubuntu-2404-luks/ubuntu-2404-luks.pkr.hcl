@@ -1,0 +1,299 @@
+packer {
+  required_version = ">= 1.9.0"
+  required_plugins {
+    proxmox = {
+      version = ">= 1.2.0"
+      source  = "github.com/hashicorp/proxmox"
+    }
+    ansible = {
+      version = ">= 1.1.0"
+      source  = "github.com/hashicorp/ansible"
+    }
+  }
+}
+
+variable "proxmox_url" { type = string }
+variable "proxmox_username" { type = string }
+variable "proxmox_token" {
+  type      = string
+  sensitive = true
+}
+variable "proxmox_node" { type = string }
+variable "proxmox_skip_tls" {
+  type    = bool
+  default = false
+}
+variable "vm_id" {
+  type    = string
+  default = "9050"
+}
+variable "vm_name" {
+  type    = string
+  default = "ubuntu-2404-luks-packer"
+}
+variable "template_name" {
+  type    = string
+  default = "tmpl-ubuntu-2404-luks"
+}
+variable "vm_cpu_cores" {
+  type    = number
+  default = 4
+}
+variable "vm_memory" {
+  type    = number
+  default = 4096
+}
+variable "vm_disk_size" {
+  type    = string
+  default = "50G"
+}
+variable "vm_storage_pool" {
+  type    = string
+  default = "local-lvm"
+}
+variable "vm_bridge" {
+  type    = string
+  default = "vmbr0"
+}
+variable "iso_file" {
+  type        = string
+  description = "Proxmox Storage-Pfad zur ISO (z.B. datacenter:iso/ubuntu-24.04.4-live-server-amd64.iso)"
+}
+variable "ssh_username" {
+  type    = string
+  default = "packer"
+}
+variable "ssh_password" {
+  type      = string
+  sensitive = true
+  default   = "packer-build-only"
+}
+variable "tang_url" {
+  type        = string
+  description = "Tang-Server URL fuer Clevis LUKS Auto-Unlock (z.B. http://172.16.60.20:7500)"
+}
+variable "luks_passphrase" {
+  type      = string
+  sensitive = true
+  default   = "packer-build-only"
+}
+
+# Build-Metadaten (werden von CI/CD Pipeline gesetzt)
+variable "ci_pipeline_id" {
+  type        = string
+  default     = "manual"
+  description = "GitLab CI Pipeline ID"
+}
+variable "ci_pipeline_source" {
+  type        = string
+  default     = "manual"
+  description = "Trigger-Quelle (manual, schedule, push, web)"
+}
+variable "ci_commit_sha" {
+  type        = string
+  default     = "unknown"
+  description = "Git Commit SHA"
+}
+variable "ci_commit_ref" {
+  type        = string
+  default     = "main"
+  description = "Git Branch oder Tag"
+}
+variable "git_release_tag" {
+  type        = string
+  default     = "unreleased"
+  description = "Semantic Release Version (z.B. ubuntu-2404-luks/v1.0.0)"
+}
+
+source "proxmox-iso" "ubuntu-luks" {
+  proxmox_url              = var.proxmox_url
+  username                 = var.proxmox_username
+  token                    = var.proxmox_token
+  insecure_skip_tls_verify = var.proxmox_skip_tls
+  node                     = var.proxmox_node
+
+  vm_id   = var.vm_id
+  vm_name = var.vm_name
+
+  # ISO — neues boot_iso Block-Format (kein Deprecation Warning)
+  boot_iso {
+    iso_file = var.iso_file
+    unmount  = true
+  }
+
+  # Hardware
+  cpu_type        = "host"
+  cores           = var.vm_cpu_cores
+  memory          = var.vm_memory
+  ballooning_minimum = 0
+  numa               = true
+  os                 = "l26"
+  machine            = "q35"
+  bios               = "ovmf"
+  scsi_controller    = "virtio-scsi-single"
+
+  # EFI Disk (UEFI benötigt EFI-Partition auf Storage)
+  efi_config {
+    efi_storage_pool  = var.vm_storage_pool
+    efi_type          = "4m"
+    pre_enrolled_keys = true
+  }
+
+  # TPM 2.0
+  tpm_config {
+    tpm_storage_pool = var.vm_storage_pool
+    tpm_version      = "v2.0"
+  }
+
+  disks {
+    disk_size    = var.vm_disk_size
+    storage_pool = var.vm_storage_pool
+    type         = "scsi"
+    io_thread    = true
+    discard      = true
+    format       = "raw"
+  }
+
+  network_adapters {
+    model    = "virtio"
+    bridge   = var.vm_bridge
+    firewall = false
+    mtu      = 1500
+  }
+
+  # Cloud-Init Drive
+  cloud_init              = true
+  cloud_init_storage_pool = var.vm_storage_pool
+
+  # VGA: std fuer ISO-Installation (GRUB braucht normalen Display)
+  vga {
+    type   = "std"
+    memory = 32
+  }
+
+  qemu_agent = true
+
+  # Autoinstall via HTTP-Server
+  http_directory    = "http"
+  http_bind_address = "0.0.0.0"
+  http_port_min     = 8000
+  http_port_max     = 8100
+  boot_wait         = "10s"
+
+  # Boot-Command: GRUB-Eintrag editieren und Autoinstall-Parameter anhaengen
+  boot_command = [
+    "<esc><esc><esc><esc>e<wait>",
+    "<down><down><down><end>",
+    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
+    "<f10>"
+  ]
+
+  # SSH
+  communicator           = "ssh"
+  ssh_username           = var.ssh_username
+  ssh_password           = var.ssh_password
+  ssh_timeout            = "30m"
+  ssh_handshake_attempts = 20
+
+  # Template
+  template_name        = var.template_name
+  template_description = join("\n", [
+    "# Ubuntu 24.04 LTS LUKS Cloud-Init Template",
+    "",
+    "| Eigenschaft | Wert |",
+    "|---|---|",
+    "| **Build-Datum** | ${formatdate("YYYY-MM-DD HH:mm", timestamp())} |",
+    "| **Packer Version** | ${packer.version} |",
+    "| **ISO** | ${var.iso_file} |",
+    "| **Git Commit** | ${var.ci_commit_sha} |",
+    "| **Git Branch/Tag** | ${var.ci_commit_ref} |",
+    "| **Release Tag** | ${var.git_release_tag} |",
+    "| **Pipeline ID** | ${var.ci_pipeline_id} |",
+    "| **Trigger** | ${var.ci_pipeline_source} |",
+    "| **Proxmox Node** | ${var.proxmox_node} |",
+    "| **Storage** | ${var.vm_storage_pool} |",
+    "| **Netzwerk** | ${var.vm_bridge} |",
+    "| **CPU** | ${var.vm_cpu_cores} Cores |",
+    "| **RAM** | ${var.vm_memory} MB |",
+    "| **Disk** | ${var.vm_disk_size} |",
+    "| **Cloud-Init** | Ja |",
+    "| **QEMU Agent** | Ja |",
+    "| **LUKS** | Ja (Clevis/Tang) |",
+    "| **Tang** | ${var.tang_url} |",
+    "",
+    "## Links",
+    "",
+    "- [Repository](https://github.com/strausmann/homelab-proxmox-templates)",
+    "- [GitLab Release](https://git.strausmann.de/strausmann/proxmox-templates/-/releases/${var.git_release_tag})",
+    "- [GitLab Pipeline](https://git.strausmann.de/strausmann/proxmox-templates/-/pipelines/${var.ci_pipeline_id})",
+  ])
+  tags = "os-ubuntu-luks;v-2404;packer;building;build-${formatdate("YYYYMMDD", timestamp())}"
+}
+
+build {
+  name    = "ubuntu-2404-luks"
+  sources = ["source.proxmox-iso.ubuntu-luks"]
+
+  # Warten bis Cloud-Init und unattended-upgrades abgeschlossen
+  provisioner "shell" {
+    inline = [
+      "echo Warte auf Cloud-Init...",
+      "sudo cloud-init status --wait",
+      "echo Cloud-Init abgeschlossen.",
+      "echo Warte bis apt-Lock frei ist...",
+      "while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do echo '  apt ist noch gesperrt, warte 10s...'; sleep 10; done",
+      "while sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do echo '  apt-lists gesperrt, warte 10s...'; sleep 10; done",
+      "echo apt-Lock ist frei."
+    ]
+  }
+
+  # Ansible Provisioner für Base-Setup
+  provisioner "ansible" {
+    playbook_file = "../../../ansible/playbooks/packer-hardening.yml"
+    extra_arguments = [
+      "--extra-vars", "packer_build=true"
+    ]
+  }
+
+  # Clevis/Tang Auto-Unlock konfigurieren
+  provisioner "shell" {
+    inline = [
+      "echo '=== Clevis/Tang Setup ==='",
+      "sudo apt-get update",
+      "sudo apt-get install -y clevis clevis-luks clevis-initramfs",
+      "echo 'Clevis installiert, binde an Tang...'",
+      "LUKS_DEV=$(sudo dmsetup info crypt-root --noheadings -c -o blkdevname 2>/dev/null | awk '{print \"/dev/\"$1}' | sed 's/[0-9]*$//' | head -1)",
+      "LUKS_PART=$(lsblk -rno NAME,TYPE | awk '$2==\"part\"{print \"/dev/\"$1}' | while read p; do sudo cryptsetup isLuks \"$p\" 2>/dev/null && echo \"$p\"; done | head -1)",
+      "LUKS_DEV=${LUKS_PART:-/dev/sda3}",
+      "echo 'LUKS Partition erkannt: '$LUKS_DEV",
+      "ls $LUKS_DEV || { echo 'FATAL: LUKS Partition nicht gefunden'; exit 1; }",
+      "TANG_THP=$(curl -sf ${var.tang_url}/adv | python3 -c \"import sys,json,base64,hashlib; adv=json.load(sys.stdin); payload=json.loads(base64.b64decode(adv['payload']+'==').decode()); key=[k for k in payload['keys'] if k.get('alg')=='ES512'][0]; canon=json.dumps({k:key[k] for k in sorted(['crv','kty','x','y']) if k in key},separators=(',',':')); print(base64.urlsafe_b64encode(hashlib.sha256(canon.encode()).digest()).rstrip(b'=').decode())\")",
+      "echo 'Tang Thumbprint: '$TANG_THP",
+      "echo '${var.luks_passphrase}' | sudo clevis luks bind -d $LUKS_DEV tang '{\"url\":\"${var.tang_url}\",\"thp\":\"'$TANG_THP'\"}'",
+      "echo 'Clevis LUKS Bind erfolgreich'",
+      "sudo update-initramfs -u -k all",
+      "echo '=== Clevis/Tang Setup abgeschlossen ==='"
+    ]
+  }
+
+  # Cleanup vor Template-Erstellung
+  provisioner "shell" {
+    inline = [
+      "sudo cloud-init clean --logs",
+      "sudo truncate -s 0 /etc/machine-id",
+      "sudo rm -f /var/lib/dbus/machine-id",
+      "sudo ln -s /etc/machine-id /var/lib/dbus/machine-id",
+      "sudo rm -f /etc/ssh/ssh_host_*",
+      "sudo truncate -s 0 /root/.bash_history",
+      "truncate -s 0 ~/.bash_history",
+      "sudo rm -f /etc/sudoers.d/packer",
+      "sudo passwd -l packer",
+      "sudo rm -f /home/packer/.ssh/authorized_keys",
+      "sudo apt-get clean",
+      "sudo apt-get autoremove -y",
+      "sudo rm -rf /tmp/* /var/tmp/*",
+      "sudo fstrim --all || true",
+      "sync"
+    ]
+  }
+}
