@@ -14,11 +14,8 @@
     packer_build: false
     docker_disk_device: /dev/sdb
     docker_mount_point: /docker
-    # Docker APT Suite — standardmaessig vom OS erkannt.
-    # Fuer Beta-Releases (z.B. Ubuntu 26.04 resolute) auf den letzten
-    # stabilen Codename setzen, bis Docker offizielle Pakete liefert.
-    # Wird per --extra-vars docker_apt_suite=noble ueberschrieben.
-    docker_apt_suite: "{{ ansible_distribution_release }}"
+    # Docker APT Suite — Fallback auf noble fuer Releases die Docker noch nicht unterstuetzt
+    docker_apt_suite: "{{ 'noble' if ansible_distribution_release in ['resolute'] else ansible_distribution_release }}"
     docker_daemon_config:
       data-root: "/docker"
       log-driver: "json-file"
