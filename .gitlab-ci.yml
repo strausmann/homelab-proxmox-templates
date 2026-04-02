@@ -195,14 +195,18 @@ variables:
 
       # 2. latest Tag hinzufuegen und building Tag entfernen (Build ist fertig)
       FINAL_TAGS=$(echo "${NEW_TAGS};latest" | sed 's/;building//g; s/building;//g')
-      curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${VM_ID}/config" \
+      if curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${VM_ID}/config" \
         -H "${PVE_AUTH}" \
-        -d "tags=${FINAL_TAGS}" || true
-      echo "  latest Tag gesetzt, building Tag entfernt auf VM ${VM_ID}"
+        --data-urlencode "tags=${FINAL_TAGS}"; then
+        echo "  latest Tag gesetzt, building Tag entfernt auf VM ${VM_ID}"
+      else
+        echo "  WARNUNG: Tags konnten nicht gesetzt werden auf VM ${VM_ID}"
+      fi
 
-      # 3. Alle anderen VMs mit latest + os-${TEMPLATE_OS} Tag finden und latest entfernen
+      # 3. Alle anderen VMs mit latest + gleicher OS-Version finden und latest entfernen
+      #    Filter: os-${TEMPLATE_OS} UND v-${TEMPLATE_VERSION} (nicht nur OS!)
       for OLD_VMID in $(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu" \
-        -H "${PVE_AUTH}" | jq -r ".data[] | select(.tags != null) | select(.tags | contains(\"latest\")) | select(.tags | contains(\"os-${TEMPLATE_OS}\")) | .vmid"); do
+        -H "${PVE_AUTH}" | jq -r ".data[] | select(.tags != null) | select(.tags | contains(\"latest\")) | select(.tags | contains(\"os-${TEMPLATE_OS}\")) | select(.tags | contains(\"v-${TEMPLATE_VERSION}\")) | .vmid"); do
         if [ "$OLD_VMID" != "$VM_ID" ]; then
           OLD_TAGS=$(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu/${OLD_VMID}/config" \
             -H "${PVE_AUTH}" | jq -r '.data.tags // ""')
@@ -211,9 +215,49 @@ variables:
           if [ -n "$CLEANED_TAGS" ]; then
             curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${OLD_VMID}/config" \
               -H "${PVE_AUTH}" \
-              -d "tags=${CLEANED_TAGS}" || true
+              --data-urlencode "tags=${CLEANED_TAGS}" || true
             echo "  latest Tag von VM ${OLD_VMID} entfernt (Tags: ${CLEANED_TAGS})"
           fi
+        fi
+      done
+
+      # 4. Alte Templates aufräumen: nur current (latest) + previous behalten
+      #    SICHERHEIT: Nur VM-IDs im Bereich 9000-9999 werden angefasst!
+      #    SORTIERUNG: Nach Build-Nummer aus Template-Name (bXX), nicht nach VM-ID
+      echo ""
+      echo "  Cleanup: Alte Templates der gleichen OS-Version entfernen..."
+
+      # Templates mit Build-Nummer sammeln: "build_nr vmid" pro Zeile, absteigend sortiert
+      TEMPLATE_LIST=$(curl -sfk "${PVE_URL}/nodes/${PVE_NODE}/qemu" \
+        -H "${PVE_AUTH}" | jq -r ".data[] | select(.template == 1) | select(.tags != null) | select(.tags | contains(\"os-${TEMPLATE_OS}\")) | select(.tags | contains(\"v-${TEMPLATE_VERSION}\")) | \"\(.name) \(.vmid)\"")
+
+      # Build-Nummer aus Name extrahieren (tmpl-...-bXX) und absteigend sortieren
+      SORTED_TEMPLATES=$(echo "${TEMPLATE_LIST}" | while read -r NAME VMID; do
+        BUILD_NUM=$(echo "${NAME}" | grep -oP '(?<=-b)\d+$' || echo "0")
+        echo "${BUILD_NUM} ${VMID} ${NAME}"
+      done | sort -t' ' -k1 -rn)
+
+      KEEP_COUNT=0
+      echo "${SORTED_TEMPLATES}" | while read -r BUILD_NUM TMPL_VMID TMPL_NAME; do
+        [ -z "$TMPL_VMID" ] && continue
+
+        # Sicherheitscheck: NUR VM-IDs im Range 9000-9999
+        if [ "$TMPL_VMID" -lt 9000 ] || [ "$TMPL_VMID" -gt 9999 ]; then
+          echo "  SKIP: VM ${TMPL_VMID} (${TMPL_NAME}) liegt ausserhalb 9000-9999 — wird NICHT angefasst"
+          continue
+        fi
+
+        KEEP_COUNT=$((KEEP_COUNT + 1))
+        if [ "$KEEP_COUNT" -le 2 ]; then
+          echo "  BEHALTEN: VM ${TMPL_VMID} (${TMPL_NAME}, Build b${BUILD_NUM}) — Platz ${KEEP_COUNT}/2"
+        else
+          echo "  LOESCHEN: VM ${TMPL_VMID} (${TMPL_NAME}, Build b${BUILD_NUM}) — aelter als die 2 neuesten"
+          curl -sfk -X POST "${PVE_URL}/nodes/${PVE_NODE}/qemu/${TMPL_VMID}/status/stop" \
+            -H "${PVE_AUTH}" 2>/dev/null || true
+          sleep 2
+          curl -sfk -X DELETE "${PVE_URL}/nodes/${PVE_NODE}/qemu/${TMPL_VMID}?purge=1&destroy-unreferenced-disks=1" \
+            -H "${PVE_AUTH}" 2>/dev/null || true
+          echo "  VM ${TMPL_VMID} entfernt."
         fi
       done
 
@@ -221,10 +265,11 @@ variables:
 
       echo ""
       echo "================================================="
-      echo "  Tag-Rotation abgeschlossen!"
+      echo "  Tag-Rotation + Cleanup abgeschlossen!"
       echo "  Name:     ${TEMPLATE_NAME}"
       echo "  VM-ID:    ${VM_ID}"
       echo "  Tags:     latest, os-${TEMPLATE_OS}, v-${TEMPLATE_VERSION}, packer"
+      echo "  Behalten: max. 2 Templates pro OS-Version (current + previous)"
       echo "  Release:  ${GITLAB_PROJECT_URL}/-/releases/${GIT_TAG}"
       echo "  Pipeline: ${GITLAB_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}"
       echo "================================================="
@@ -267,8 +312,6 @@ build_ubuntu_2404:
         - packer/linux/ubuntu-2404/**/*
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
-      when: manual
-      allow_failure: true
 
 rotate_latest_ubuntu_2404:
   extends: .tag_rotation_base
@@ -287,8 +330,6 @@ rotate_latest_ubuntu_2404:
         - packer/linux/ubuntu-2404/**/*
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
-      when: manual
-      allow_failure: true
 
 # =============================================================================
 # Ubuntu 24.04 Docker-Node
@@ -332,8 +373,6 @@ build_ubuntu_2404_docker:
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
         - ansible/playbooks/packer-hardening-docker.yml
-      when: manual
-      allow_failure: true
 
 rotate_latest_ubuntu_2404_docker:
   extends: .tag_rotation_base
@@ -354,8 +393,6 @@ rotate_latest_ubuntu_2404_docker:
         - profiles/base.yml
         - ansible/playbooks/packer-hardening.yml
         - ansible/playbooks/packer-hardening-docker.yml
-      when: manual
-      allow_failure: true
 
 # =============================================================================
 # Ubuntu 26.04 (Beta — Final Release: 23. April 2026)

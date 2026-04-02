@@ -255,6 +255,8 @@ build {
       "sudo truncate -s 0 /root/.bash_history",
       "truncate -s 0 ~/.bash_history",
       "sudo rm -f /etc/sudoers.d/packer",
+      "sudo passwd -l packer",
+      "sudo rm -f /home/packer/.ssh/authorized_keys",
       "sudo apt-get clean",
       "sudo apt-get autoremove -y",
       "sudo rm -rf /tmp/* /var/tmp/*",

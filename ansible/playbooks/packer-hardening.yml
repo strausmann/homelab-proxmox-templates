@@ -137,15 +137,19 @@
     # ===========================
     # Tailscale APT Repository + Paket
     # ===========================
+    - name: Tailscale APT Suite bestimmen (Fallback noble fuer neue Releases)
+      ansible.builtin.set_fact:
+        tailscale_apt_suite: "{{ 'noble' if ansible_distribution_release in ['resolute'] else ansible_distribution_release }}"
+
     - name: Tailscale GPG Key herunterladen
       ansible.builtin.get_url:
-        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        url: "https://pkgs.tailscale.com/stable/ubuntu/{{ tailscale_apt_suite }}.noarmor.gpg"
         dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
         mode: "0644"
 
     - name: Tailscale APT Repository hinzufuegen
       ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu noble main"
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu {{ tailscale_apt_suite }} main"
         filename: tailscale
         state: present
 
