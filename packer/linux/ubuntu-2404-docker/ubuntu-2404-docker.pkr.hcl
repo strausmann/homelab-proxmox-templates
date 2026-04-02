@@ -185,7 +185,7 @@ source "proxmox-iso" "ubuntu-docker" {
   http_bind_address = "0.0.0.0"
   http_port_min     = 8000
   http_port_max     = 8100
-  boot_wait         = "10s"
+  boot_wait         = "15s"  # Docker-Template braucht laenger wegen 2. Disk (UEFI Init)
 
   # Boot-Command: GRUB-Eintrag editieren und Autoinstall-Parameter anhaengen
   boot_command = [
