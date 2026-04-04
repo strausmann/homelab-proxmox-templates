@@ -258,6 +258,23 @@
         mode: "0644"
 
     # ===========================
+    # Terminal-Fix: Mouse Tracking + Bracketed Paste (Windows Terminal)
+    # ===========================
+    - name: Bracketed Paste systemweit deaktivieren
+      ansible.builtin.lineinfile:
+        path: /etc/inputrc
+        line: "set enable-bracketed-paste off"
+        create: true
+        mode: "0644"
+
+    - name: Mouse Tracking + Focus Reporting deaktivieren
+      ansible.builtin.lineinfile:
+        path: /etc/bash.bashrc
+        line: "printf '\\e[?1000l\\e[?1002l\\e[?1003l\\e[?1004l\\e[?1006l'"
+        create: true
+        mode: "0644"
+
+    # ===========================
     # Cleanup (nur im Packer Build)
     # ===========================
     - name: APT Cache leeren
