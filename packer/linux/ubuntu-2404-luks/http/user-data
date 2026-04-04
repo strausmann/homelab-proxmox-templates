@@ -119,7 +119,8 @@ autoinstall:
     - "chmod 700 /target/root/.ssh"
     - "chmod 600 /target/root/.ssh/authorized_keys"
     # Netzwerk im initramfs fuer Clevis/Tang (DHCP)
-    # DEVICE leer lassen = Auto-Detection (Interface-Name kann im initramfs anders sein)
+    # Im initramfs heisst das Interface eth0 (udev-Umbenennung noch nicht aktiv)
+    - "echo 'DEVICE=eth0' >> /target/etc/initramfs-tools/initramfs.conf"
     - "echo 'IP=dhcp' >> /target/etc/initramfs-tools/initramfs.conf"
     # Clevis/Tang installieren und binden (VOR erstem Reboot!)
     # Damit die VM beim ersten Boot automatisch via Tang entschluesselt wird
