@@ -262,6 +262,15 @@ build {
     ]
   }
 
+  # Fix: SSH Terminal ANSI Escape-Sequenzen bei Mausklick/Paste (Windows Terminal)
+  # Deaktiviert SGR Mouse Tracking und Bracketed Paste systemweit
+  provisioner "shell" {
+    inline = [
+      "echo 'set enable-bracketed-paste off' | sudo tee -a /etc/inputrc",
+      "printf '%s\\n' \"printf '\\\\e[?1000l\\\\e[?1002l\\\\e[?1003l\\\\e[?1004l\\\\e[?1006l'\" | sudo tee -a /etc/bash.bashrc"
+    ]
+  }
+
   # Cleanup vor Template-Erstellung
   provisioner "shell" {
     inline = [
@@ -273,8 +282,7 @@ build {
       "sudo truncate -s 0 /root/.bash_history",
       "truncate -s 0 ~/.bash_history",
       "sudo rm -f /etc/sudoers.d/packer",
-      "sudo passwd -l packer",
-      "sudo rm -f /home/packer/.ssh/authorized_keys",
+      "sudo userdel -r packer || true",
       "sudo apt-get clean",
       "sudo apt-get autoremove -y",
       "sudo rm -rf /tmp/* /var/tmp/*",

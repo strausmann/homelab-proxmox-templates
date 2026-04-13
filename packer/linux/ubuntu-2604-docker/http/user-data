@@ -50,7 +50,7 @@ autoinstall:
     version: 2
   storage:
     layout:
-      name: lvm
+      name: direct
   late-commands:
     # QEMU Guest Agent aktivieren (Packer braucht ihn fuer IP-Erkennung)
     - "curtin in-target -- systemctl enable qemu-guest-agent"
