@@ -155,19 +155,19 @@ source "proxmox-iso" "ubuntu-luks" {
     format       = "raw"
   }
 
-  # Zweit-Disk: Keyfile-Device fuer autonomen Boot (Issue #214 Defekt #1)
-  # 16 MiB raw — enthaelt 4096-Byte-Keyfile (dd from /dev/urandom) am Anfang der Disk.
-  # Post-Deployment (Ansible clevis-tang-bind): luksKillSlot 4 + Disk via Proxmox API detachen.
-  # Hinweis: bpg/proxmox Packer-Plugin unterstuetzt kein backup-Attribut —
-  # Disk wird nach Tang-Bind ohnehin detached, PBS-Backup-Exclusion nicht noetig.
-  disks {
-    disk_size    = "16M"
-    storage_pool = var.vm_storage_pool
-    type         = "scsi"
-    io_thread    = false
-    discard      = true
-    format       = "raw"
-  }
+  # Hinweis: Autonomer Boot via KEYFILE_PATTERN (Issue #214 Defekt #1).
+  # Keyfile liegt als File in /etc/cryptsetup-keys.d/luks-keyfile.key und wird
+  # durch cryptsetup-initramfs ins initramfs eingebettet. Keine Zweit-Disk noetig.
+  # Grund: Ubuntu 24.04 cryptsetup-initramfs unterstuetzt keine Block-Device-Keyfiles
+  # ohne Custom-Hooks — daher File-basiert (Recherche:
+  # docs/research/2026-04-14-packer-luks-keyfile-reencrypt-workflow.md).
+  # Post-Deployment (Ansible clevis-tang-bind):
+  #   1. cryptsetup reencrypt → neuer Master Key
+  #   2. clevis luks bind → Tang-Keyslot 3
+  #   3. cryptsetup luksKillSlot 4 → Keyfile-Slot entfernen
+  #   4. rm /etc/cryptsetup-keys.d/luks-keyfile.key
+  #   5. update-initramfs -u -k all → Keyfile aus initramfs entfernt
+  # → Produktiv-VM hat weder Keyfile-File noch Keyslot-4 noch Keyfile im initramfs.
 
   network_adapters {
     model    = "virtio"
