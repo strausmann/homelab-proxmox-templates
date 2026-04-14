@@ -1,4 +1,4 @@
-# Build-Trigger: 2026-04-14 (Debug-Run mit KEEP_FAILED_VM)
+# Pfad B: Tang-Binding aus Template entfernt (Issue #213, 2026-04-14)
 packer {
   required_version = ">= 1.9.0"
   required_plugins {
@@ -256,14 +256,15 @@ build {
     ]
   }
 
-  # Clevis/Tang Verifikation (Binding erfolgt im Autoinstall late-commands)
+  # LUKS-Verifikation (Pfad B: kein Clevis-Binding im Template)
+  # Tang-Binding erfolgt post-deployment via Ansible-Role clevis-tang-bind
   provisioner "shell" {
     inline = [
-      "echo '=== Clevis/Tang Verifikation ==='",
-      "sudo clevis luks list -d /dev/sda3 || { echo 'FEHLER: Keine Clevis-Bindung auf /dev/sda3'; exit 1; }",
-      "echo 'Clevis-Bindung verifiziert'",
-      "lsinitramfs /boot/initrd.img-$$(uname -r) | grep -q clevis && echo 'Clevis im initramfs vorhanden' || echo 'WARNUNG: Clevis nicht im initramfs'",
-      "echo '=== Clevis/Tang Verifikation abgeschlossen ==='"
+      "echo '=== LUKS-Verifikation ==='",
+      "sudo cryptsetup isLuks /dev/sda3 && echo 'LUKS2 auf /dev/sda3 verifiziert' || { echo 'FEHLER: /dev/sda3 ist kein LUKS-Volume'; exit 1; }",
+      "sudo cryptsetup luksDump /dev/sda3 | grep -E 'Version|LUKS'",
+      "echo 'Hinweis: Clevis/Tang-Binding via Ansible-Role clevis-tang-bind nach Deployment'",
+      "echo '=== LUKS-Verifikation abgeschlossen ==='"
     ]
   }
 

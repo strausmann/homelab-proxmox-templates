@@ -118,15 +118,8 @@ autoinstall:
     - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann' >> /target/root/.ssh/authorized_keys"
     - "chmod 700 /target/root/.ssh"
     - "chmod 600 /target/root/.ssh/authorized_keys"
-    # Netzwerk im initramfs fuer Clevis/Tang (DHCP)
-    # Im initramfs heisst das Interface eth0 (udev-Umbenennung noch nicht aktiv)
-    - "echo 'DEVICE=eth0' >> /target/etc/initramfs-tools/initramfs.conf"
-    - "echo 'IP=dhcp' >> /target/etc/initramfs-tools/initramfs.conf"
-    # Clevis/Tang installieren und binden (VOR erstem Reboot!)
-    # Damit die VM beim ersten Boot automatisch via Tang entschluesselt wird
-    - "curtin in-target -- apt-get update"
-    - "curtin in-target -- apt-get install -y clevis clevis-luks clevis-initramfs curl"
-    # Clevis an Tang binden (Thumbprint aus Vault: homelab-tang-server-hhplex01)
-    - "curtin in-target -- sh -c 'echo packer-build-only | clevis luks bind -d /dev/sda3 tang '\"'\"'{\"url\":\"http://172.16.60.20:7500\",\"thp\":\"bmX9HC-lWPl9Rsm8LTGJrW1JhlZ-ZXhAppHEnC0fSd8\"}'\"'\"''"
-    # initramfs mit Clevis + Netzwerk neu bauen
+    # Hinweis: Clevis/Tang-Binding erfolgt NICHT im Template-Build (Pfad B Split-Approach)
+    # Grund: update-initramfs im live-installer-Kontext erzeugt kein funktionsfaehiges
+    # Tang-faehiges initramfs (Recherche: docs/research/luks-clevis-tang-initramfs-ubuntu-2404.md)
+    # Tang-Binding wird post-deployment per Ansible-Role clevis-tang-bind durchgefuehrt.
     - "curtin in-target -- update-initramfs -u -k all"
