@@ -108,45 +108,21 @@ autoinstall:
     # QEMU Guest Agent aktivieren (Packer braucht ihn fuer IP-Erkennung)
     - "curtin in-target -- systemctl enable qemu-guest-agent"
     # ===================================================================
-    # KEYFILE-PROVISIONING via KEYFILE_PATTERN (Issue #214 Defekt #1)
-    # Keyfile wird als regulaere Datei in /etc/cryptsetup-keys.d/ abgelegt
-    # und durch cryptsetup-initramfs ins initramfs eingebettet.
-    # Block-Device-Keyfiles werden von Ubuntu 24.04 nicht unterstuetzt
-    # ohne Custom-initramfs-Hook — daher File-basiert.
-    # Post-Deployment (Ansible clevis-tang-bind):
-    #   1. cryptsetup reencrypt → neuer Master Key
-    #   2. clevis luks bind → Tang-Keyslot 3
-    #   3. cryptsetup luksKillSlot 4 → Keyfile-Slot entfernen
-    #   4. rm /etc/cryptsetup-keys.d/luks-keyfile.key
-    #   5. update-initramfs -u -k all → Keyfile aus initramfs raus
+    # AUFGERÄUMT 2026-04-15: Keyfile-Provisioning + SSH-Hardening wurden
+    # aus user-data entfernt. Grund: 20+ curtin-in-target-Calls in late-
+    # commands haben zum Deadlock gefuehrt (unattended-upgrade-shutdown
+    # blockiert mit cloud-init → Packer SCP-Timeout nach 5 Min).
+    #
+    # Diese Schritte werden stattdessen post-deployment erledigt:
+    # - Keyfile/Tang-Binding: Ansible-Role clevis-tang-bind
+    # - SSH-Hardening: Ansible-Role oder separates Playbook
+    # - Packer-User-Cleanup: cloud-init runcmd (weiter unten)
+    #
+    # Template hat beim ersten Clone-Boot einen LUKS-Prompt — dieser wird
+    # temporaer manuell (oder via qm-monitor-sendkey) mit 'packer-build-only'
+    # beantwortet. Danach uebernimmt Ansible das komplette Hardening und
+    # richtet autonomen Auto-Unlock ein.
     # ===================================================================
-    # 1. Random-Keyfile als File im Target anlegen (4096 Bytes, chmod 0400)
-    - "curtin in-target -- mkdir -p /etc/cryptsetup-keys.d"
-    - "curtin in-target -- sh -c 'dd if=/dev/urandom of=/etc/cryptsetup-keys.d/luks-keyfile.key bs=4096 count=1 conv=fsync'"
-    - "curtin in-target -- chmod 0400 /etc/cryptsetup-keys.d/luks-keyfile.key"
-    # 2. Keyfile als LUKS-Keyslot 4 hinzufuegen (mit Primaer-Passphrase entsperren)
-    - "sh -c 'LUKS_UUID=$(blkid -s UUID -o value /dev/sda3); printf \"%s\" \"packer-build-only\" | curtin in-target -- cryptsetup luksAddKey --key-slot 4 --new-keyfile-size 4096 /dev/disk/by-uuid/$LUKS_UUID /etc/cryptsetup-keys.d/luks-keyfile.key'"
-    # 3. crypttab umschreiben: Keyfile-File statt "none" (interaktiv) oder Block-Device
-    #    Format: NAME  SOURCE-UUID  KEY-FILE  OPTIONS
-    - "sh -c 'echo \"crypt-root UUID=$(blkid -s UUID -o value /dev/sda3) /etc/cryptsetup-keys.d/luks-keyfile.key luks,keyfile-size=4096,discard\" > /target/etc/crypttab'"
-    # 4. KEYFILE_PATTERN im cryptsetup-initramfs Hook setzen → Keyfile wird ins initramfs embedded
-    - "sh -c 'echo KEYFILE_PATTERN=/etc/cryptsetup-keys.d/*.key >> /target/etc/cryptsetup-initramfs/conf-hook'"
-    # 5. UMASK=0077 damit initramfs-Dateirechte den Keyfile-Inhalt schuetzen
-    - "sh -c 'echo UMASK=0077 >> /target/etc/initramfs-tools/initramfs.conf'"
-    # 6. Initramfs neu bauen — Keyfile wird eingebettet, crypttab uebernommen
-    - "curtin in-target -- update-initramfs -u -k all"
-    # SSH-Hardening Drop-In ins Target schreiben (nicht ins Live-Installer!)
-    # WICHTIG: Darf NICHT in Ansible-Playbook stehen, weil ein Reload des sshd
-    # im Live-Installer Packers Password-Auth zerstoeren wuerde (Exit 254 beim
-    # naechsten SCP-Upload). Config greift erst beim ersten Boot der Clone-VM.
-    # Einzeln echo statt heredoc — konsistent mit anderen late-commands.
-    - "curtin in-target -- sh -c 'echo \"# HomeLab SSH Baseline\" > /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
-    - "curtin in-target -- sh -c 'echo MaxAuthTries 30 >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
-    - "curtin in-target -- sh -c 'echo MaxSessions 10 >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
-    - "curtin in-target -- sh -c 'echo PasswordAuthentication no >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
-    - "curtin in-target -- sh -c 'echo PermitRootLogin prohibit-password >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
-    - "curtin in-target -- sh -c 'echo KbdInteractiveAuthentication no >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
-    - "curtin in-target -- chmod 0644 /etc/ssh/sshd_config.d/99-homelab-sshd.conf"
     # Packer User Sudo-Rechte (explizit mit tee statt >>)
     - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
     - "chmod 440 /target/etc/sudoers.d/packer"
@@ -156,11 +132,9 @@ autoinstall:
     - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann' >> /target/root/.ssh/authorized_keys"
     - "chmod 700 /target/root/.ssh"
     - "chmod 600 /target/root/.ssh/authorized_keys"
-    # Hinweis: Clevis/Tang-Binding erfolgt NICHT im Template-Build (Pfad B Split-Approach)
-    # Grund: update-initramfs im live-installer-Kontext erzeugt kein funktionsfaehiges
-    # Tang-faehiges initramfs (Recherche: docs/research/luks-clevis-tang-initramfs-ubuntu-2404.md)
-    # Tang-Binding wird post-deployment per Ansible-Role clevis-tang-bind durchgefuehrt.
-    # Hinweis: update-initramfs bereits weiter oben (Keyfile-crypttab) ausgefuehrt.
+    # Hinweis: Clevis/Tang-Binding + Keyfile + SSH-Hardening erfolgen
+    # post-deployment via Ansible-Role clevis-tang-bind (Pfad B).
+    # Siehe: docs/research/luks-clevis-tang-initramfs-ubuntu-2404.md
     # ===================================================================
     # GRUB-Cmdline bereinigen: autoinstall und ds=nocloud-net entfernen
     # Ubuntu Autoinstall traegt diese Parameter in /etc/default/grub ein.
