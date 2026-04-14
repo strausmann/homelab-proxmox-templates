@@ -202,6 +202,19 @@
         line: "PermitRootLogin prohibit-password"
         state: present
 
+    - name: SSH MaxAuthTries Drop-In setzen (HomeLab-Standard)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-homelab-sshd.conf
+        content: |
+          # HomeLab-Standard: MaxAuthTries hoch fuer Bitwarden-Agent
+          # Bitwarden Desktop exportiert viele Keys gleichzeitig - Default 6 reicht nicht
+          MaxAuthTries 30
+          MaxSessions 10
+        owner: root
+        group: root
+        mode: "0644"
+      notify: SSH Daemon reload
+
     # --- SSH Keys permanent fuer root ---
     - name: Root .ssh Verzeichnis erstellen
       ansible.builtin.file:
@@ -286,3 +299,8 @@
     - name: Keyboard Config anwenden
       ansible.builtin.command: dpkg-reconfigure -f noninteractive keyboard-configuration
       changed_when: true
+
+    - name: SSH Daemon reload
+      ansible.builtin.systemd:
+        name: ssh
+        state: reloaded
