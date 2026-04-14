@@ -157,17 +157,16 @@ source "proxmox-iso" "ubuntu-luks" {
 
   # Zweit-Disk: Keyfile-Device fuer autonomen Boot (Issue #214 Defekt #1)
   # 16 MiB raw — enthaelt 4096-Byte-Keyfile (dd from /dev/urandom) am Anfang der Disk.
-  # backup=false: Disk enthaelt Keyfile, soll NICHT in PBS-Backups landen.
   # Post-Deployment (Ansible clevis-tang-bind): luksKillSlot 4 + Disk via Proxmox API detachen.
+  # Hinweis: bpg/proxmox Packer-Plugin unterstuetzt kein backup-Attribut —
+  # Disk wird nach Tang-Bind ohnehin detached, PBS-Backup-Exclusion nicht noetig.
   disks {
     disk_size    = "16M"
     storage_pool = var.vm_storage_pool
     type         = "scsi"
     io_thread    = false
-    ssd          = false
-    discard      = "on"
+    discard      = true
     format       = "raw"
-    backup       = false
   }
 
   network_adapters {
