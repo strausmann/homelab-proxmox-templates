@@ -131,6 +131,22 @@ variables:
       echo "================================================="
   after_script:
     - |
+      # Opt-in: Fehlgeschlagene Build-VM fuer Debugging erhalten
+      # Aktivieren per Push-Option: git push -o ci.variable="KEEP_FAILED_VM=true"
+      if [ "${KEEP_FAILED_VM:-false}" = "true" ]; then
+        VM_ID_FILE="/tmp/packer-vm-id-${CI_PIPELINE_ID}"
+        if [ -f "${VM_ID_FILE}" ]; then
+          VM_ID=$(cat "${VM_ID_FILE}")
+          echo "================================================="
+          echo "  KEEP_FAILED_VM=true — Cleanup uebersprungen"
+          echo "  Build-VM ${VM_ID} bleibt erhalten fuer Debugging"
+          echo "  Manuelles Aufraeumen ueber Proxmox UI noetig"
+          echo "================================================="
+          rm -f "${VM_ID_FILE}"
+        fi
+        exit 0
+      fi
+
       # Cleanup: NUR die eigene Build-VM entfernen (bei Abbruch oder Fehler)
       # WICHTIG: Nie fremde VMs loeschen — nur die VM-ID aus der eigenen Datei
       VM_ID_FILE="/tmp/packer-vm-id-${CI_PIPELINE_ID}"
