@@ -76,23 +76,17 @@ autoinstall:
         type: partition
         device: disk0
         size: -1
+      # LUKS2 dm_crypt — kein LVM darunter (Direct-Layout)
+      # Passphrase wird spaeter durch Keyfile ersetzt (late-commands)
       - id: luks-crypt
         type: dm_crypt
         volume: luks-part
         dm_name: crypt-root
         key: packer-build-only
-      - id: vg0
-        type: lvm_volgroup
-        devices: [luks-crypt]
-        name: vg0
-      - id: lv-root
-        type: lvm_partition
-        volgroup: vg0
-        name: root
-        size: -1
+      # Root-Filesystem direkt auf LUKS (kein LVM)
       - id: root-format
         type: format
-        volume: lv-root
+        volume: luks-crypt
         fstype: ext4
       - id: mount-root
         type: mount
