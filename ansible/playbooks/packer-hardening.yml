@@ -202,22 +202,14 @@
         line: "PermitRootLogin prohibit-password"
         state: present
 
-    - name: SSH Hardening Drop-In setzen (HomeLab-Baseline)
-      ansible.builtin.copy:
-        dest: /etc/ssh/sshd_config.d/99-homelab-sshd.conf
-        content: |
-          # HomeLab SSH Baseline
-          # MaxAuthTries hoch: Bitwarden Desktop exportiert viele Keys gleichzeitig
-          MaxAuthTries 30
-          MaxSessions 10
-          # Passwort-Login explizit deaktivieren — Cloud-Init setzt diesen Wert sonst zurueck
-          PasswordAuthentication no
-          PermitRootLogin prohibit-password
-          KbdInteractiveAuthentication no
-        owner: root
-        group: root
-        mode: "0644"
-      notify: SSH Daemon reload
+    # HINWEIS: 99-homelab-sshd.conf wird NICHT hier via Ansible geschrieben,
+    # sondern via curtin in-target in http/user-data late-commands.
+    #
+    # Grund: Ansible laeuft in Packer gegen die Subiquity-Installer-SSH-Session.
+    # Wenn der 'SSH Daemon reload' Handler ausgeloest wird, greift das
+    # 'PasswordAuthentication no' sofort im Live-Installer und Packer verliert
+    # die Moeglichkeit weitere Shell-Provisioner zu uploaden (Exit-Code 254).
+    # Die Config muss ausschliesslich im Ziel-System landen, nicht im Live-Installer.
 
     # --- SSH Keys permanent fuer root ---
     - name: Root .ssh Verzeichnis erstellen
@@ -304,7 +296,3 @@
       ansible.builtin.command: dpkg-reconfigure -f noninteractive keyboard-configuration
       changed_when: true
 
-    - name: SSH Daemon reload
-      ansible.builtin.systemd:
-        name: ssh
-        state: reloaded
