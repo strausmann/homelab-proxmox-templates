@@ -263,10 +263,17 @@ build {
   }
 
   # Ansible Provisioner für Base-Setup
+  #
+  # ansible_remote_tmp explizit auf /tmp/.ansible-packer setzen:
+  # Packer's Ansible-Provisioner nutzt ansonsten eine Konfiguration vom Runner-Host
+  # (hhbuild01) die '~gitlab-runner/.ansible/tmp' als absoluten Pfad sendet —
+  # existiert nicht auf der Target-VM und Gathering Facts schlaegt fehl.
+  # /tmp ist auf jedem System vorhanden und packer-user hat Schreibrechte.
   provisioner "ansible" {
     playbook_file = "../../../ansible/playbooks/packer-hardening.yml"
     extra_arguments = [
-      "--extra-vars", "packer_build=true"
+      "--extra-vars", "packer_build=true",
+      "-e", "ansible_remote_tmp=/tmp/.ansible-packer"
     ]
   }
 
