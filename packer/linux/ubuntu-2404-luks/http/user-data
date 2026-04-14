@@ -103,6 +103,24 @@ autoinstall:
   late-commands:
     # QEMU Guest Agent aktivieren (Packer braucht ihn fuer IP-Erkennung)
     - "curtin in-target -- systemctl enable qemu-guest-agent"
+    # ===================================================================
+    # KEYFILE-PROVISIONING auf /dev/sdb (Issue #214 Defekt #1)
+    # /dev/sdb ist die Zweit-Disk (Packer scsi1, 16 MiB raw).
+    # Die VM entsperrt LUKS damit beim Boot automatisch ohne Passphrase-Prompt.
+    # Post-Deployment (Ansible clevis-tang-bind):
+    #   1. Tang-Binding → Keyslot 3
+    #   2. luksKillSlot 4 (Keyfile entfernen)
+    #   3. Disk via Proxmox API detachen
+    # ===================================================================
+    # 1. Random-Keyfile schreiben (4096 Bytes am Anfang von /dev/sdb)
+    - "dd if=/dev/urandom of=/dev/sdb bs=4096 count=1 conv=fsync"
+    # 2. Keyfile als LUKS-Keyslot 4 hinzufuegen (mit Primaer-Passphrase entsperren)
+    - "sh -c 'printf \"%s\" \"packer-build-only\" | cryptsetup luksAddKey --key-slot 4 --keyfile-size 4096 /dev/sda3 /dev/sdb'"
+    # 3. crypttab auf Keyfile-Device umstellen (sdb entsperrt crypt-root beim Boot)
+    #    Format: NAME  SOURCE-UUID  KEY-DEVICE  OPTIONS
+    - "sh -c 'echo \"crypt-root UUID=$(blkid -s UUID -o value /dev/sda3) /dev/sdb luks,keyfile-size=4096,discard\" > /target/etc/crypttab'"
+    # 4. Initramfs neu bauen — crypttab-Aenderung wird uebernommen
+    - "curtin in-target -- update-initramfs -u -k all"
     # Packer User Sudo-Rechte (explizit mit tee statt >>)
     - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
     - "chmod 440 /target/etc/sudoers.d/packer"
@@ -116,7 +134,7 @@ autoinstall:
     # Grund: update-initramfs im live-installer-Kontext erzeugt kein funktionsfaehiges
     # Tang-faehiges initramfs (Recherche: docs/research/luks-clevis-tang-initramfs-ubuntu-2404.md)
     # Tang-Binding wird post-deployment per Ansible-Role clevis-tang-bind durchgefuehrt.
-    - "curtin in-target -- update-initramfs -u -k all"
+    # Hinweis: update-initramfs bereits weiter oben (Keyfile-crypttab) ausgefuehrt.
     # ===================================================================
     # GRUB-Cmdline bereinigen: autoinstall und ds=nocloud-net entfernen
     # Ubuntu Autoinstall traegt diese Parameter in /etc/default/grub ein.
