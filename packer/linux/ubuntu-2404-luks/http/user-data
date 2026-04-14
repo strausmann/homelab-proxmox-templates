@@ -22,7 +22,11 @@ autoinstall:
       - name: packer
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
-        lock_passwd: true
+        # lock_passwd: false — Packer nutzt ssh_password fuer SSH-Login waehrend Build.
+        # Password-Schutz nach dem Build:
+        #   - PasswordAuthentication no in 99-homelab-sshd.conf (Commit b2a8891)
+        #   - Cloud-Init runcmd loescht packer-User beim ersten Boot der Clone-VM
+        lock_passwd: false
         ssh_authorized_keys:
           - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK6gqu8YPR+KppBxvK+rsQHKeWq5jY/zC5HJO3sPmx1K ansible-vm-homelab-nodes"
           - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARsgv7N7lCpWsn2jy8w8Se2sqKulcaAM8ACIda4B7gm strausmann"
