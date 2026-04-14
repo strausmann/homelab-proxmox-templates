@@ -8,10 +8,12 @@ stages:
 variables:
   PACKER_CACHE_DIR: /build/packer_cache
   GITLAB_PROJECT_URL: "https://git.strausmann.de/strausmann/proxmox-templates"
-  # Debug-Defaults: Failed Build-VM fuer Diagnose erhalten.
-  # Zum Deaktivieren: KEEP_FAILED_VM: "false" in Pipeline-Variable oder Push-Option.
-  KEEP_FAILED_VM: "true"
-  PACKER_ON_ERROR: "abort"
+  # KEEP_FAILED_VM und PACKER_ON_ERROR NICHT global als Default setzen —
+  # sonst bleiben bei JEDEM Build (2404, 2604, docker etc.) fehlgeschlagene
+  # VMs auf Proxmox stehen und verstopfen den Node.
+  # Zum Debugging einzelner Builds per Push-Option:
+  #   git push -o ci.variable="KEEP_FAILED_VM=true" -o ci.variable="PACKER_ON_ERROR=abort"
+  # Oder per Pipeline "Run Pipeline" mit Variable-Input.
 
 # =============================================================================
 # Hidden Jobs (Base Templates)
