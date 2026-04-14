@@ -8,6 +8,10 @@ stages:
 variables:
   PACKER_CACHE_DIR: /build/packer_cache
   GITLAB_PROJECT_URL: "https://git.strausmann.de/strausmann/proxmox-templates"
+  # Debug-Defaults: Failed Build-VM fuer Diagnose erhalten.
+  # Zum Deaktivieren: KEEP_FAILED_VM: "false" in Pipeline-Variable oder Push-Option.
+  KEEP_FAILED_VM: "true"
+  PACKER_ON_ERROR: "abort"
 
 # =============================================================================
 # Hidden Jobs (Base Templates)
