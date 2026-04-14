@@ -112,14 +112,23 @@ autoinstall:
     #   2. luksKillSlot 4 (Keyfile entfernen)
     #   3. Disk via Proxmox API detachen
     # ===================================================================
-    # 1. Random-Keyfile schreiben (4096 Bytes am Anfang von /dev/sdb)
-    - "dd if=/dev/urandom of=/dev/sdb bs=4096 count=1 conv=fsync"
-    # 2. Keyfile als LUKS-Keyslot 4 hinzufuegen (mit Primaer-Passphrase entsperren)
-    - "sh -c 'printf \"%s\" \"packer-build-only\" | cryptsetup luksAddKey --key-slot 4 --new-keyfile-size 4096 /dev/sda3 /dev/sdb'"
-    # 3. crypttab auf Keyfile-Device umstellen (sdb entsperrt crypt-root beim Boot)
+    # 1. Keyfile-Disk /dev/sdb partitionieren mit stabilem PARTLABEL
+    #    WICHTIG: /dev/sdb ist nicht stabil (Disk-Ordering beim Boot kann shuffled werden).
+    #    Loesung: GPT-Partition mit Label "luks-keyfile" → stabiler Pfad
+    #    /dev/disk/by-partlabel/luks-keyfile im initramfs.
+    - "sgdisk --zap-all /dev/sdb"
+    - "sgdisk --new=1:0:0 --change-name=1:luks-keyfile --typecode=1:8300 /dev/sdb"
+    - "partprobe /dev/sdb"
+    - "udevadm settle"
+    # 2. Random-Keyfile schreiben (4096 Bytes am Anfang von /dev/sdb1)
+    - "dd if=/dev/urandom of=/dev/sdb1 bs=4096 count=1 conv=fsync"
+    # 3. Keyfile als LUKS-Keyslot 4 hinzufuegen (mit Primaer-Passphrase entsperren)
+    #    LUKS-Source via UUID fuer Stabilitaet (sda3 ist auch nicht garantiert stabil)
+    - "sh -c 'LUKS_UUID=$(blkid -s UUID -o value /dev/sda3); printf \"%s\" \"packer-build-only\" | cryptsetup luksAddKey --key-slot 4 --new-keyfile-size 4096 /dev/disk/by-uuid/$LUKS_UUID /dev/disk/by-partlabel/luks-keyfile'"
+    # 4. crypttab mit stabilen Pfaden schreiben (beide Seiten via stabile IDs)
     #    Format: NAME  SOURCE-UUID  KEY-DEVICE  OPTIONS
-    - "sh -c 'echo \"crypt-root UUID=$(blkid -s UUID -o value /dev/sda3) /dev/sdb luks,keyfile-size=4096,discard\" > /target/etc/crypttab'"
-    # 4. Initramfs neu bauen — crypttab-Aenderung wird uebernommen
+    - "sh -c 'echo \"crypt-root UUID=$(blkid -s UUID -o value /dev/sda3) /dev/disk/by-partlabel/luks-keyfile luks,keyfile-size=4096,discard\" > /target/etc/crypttab'"
+    # 5. Initramfs neu bauen — crypttab-Aenderung wird uebernommen
     - "curtin in-target -- update-initramfs -u -k all"
     # Packer User Sudo-Rechte (explizit mit tee statt >>)
     - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
