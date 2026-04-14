@@ -202,14 +202,18 @@
         line: "PermitRootLogin prohibit-password"
         state: present
 
-    - name: SSH MaxAuthTries Drop-In setzen (HomeLab-Standard)
+    - name: SSH Hardening Drop-In setzen (HomeLab-Baseline)
       ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/99-homelab-sshd.conf
         content: |
-          # HomeLab-Standard: MaxAuthTries hoch fuer Bitwarden-Agent
-          # Bitwarden Desktop exportiert viele Keys gleichzeitig - Default 6 reicht nicht
+          # HomeLab SSH Baseline
+          # MaxAuthTries hoch: Bitwarden Desktop exportiert viele Keys gleichzeitig
           MaxAuthTries 30
           MaxSessions 10
+          # Passwort-Login explizit deaktivieren — Cloud-Init setzt diesen Wert sonst zurueck
+          PasswordAuthentication no
+          PermitRootLogin prohibit-password
+          KbdInteractiveAuthentication no
         owner: root
         group: root
         mode: "0644"
