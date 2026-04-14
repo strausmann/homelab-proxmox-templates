@@ -117,3 +117,13 @@ autoinstall:
     # Tang-faehiges initramfs (Recherche: docs/research/luks-clevis-tang-initramfs-ubuntu-2404.md)
     # Tang-Binding wird post-deployment per Ansible-Role clevis-tang-bind durchgefuehrt.
     - "curtin in-target -- update-initramfs -u -k all"
+    # ===================================================================
+    # GRUB-Cmdline bereinigen: autoinstall und ds=nocloud-net entfernen
+    # Ubuntu Autoinstall traegt diese Parameter in /etc/default/grub ein.
+    # Sie muessen vor Template-Erstellung entfernt werden damit geklonte VMs
+    # beim naechsten Boot nicht erneut in den Autoinstall-Modus wechseln.
+    # Defekte #5 (autoinstall in Cmdline) + #6 (ds=nocloud-net in Cmdline)
+    # ===================================================================
+    - "curtin in-target -- sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash\"/' /etc/default/grub"
+    - "curtin in-target -- sed -i 's|GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"\"|' /etc/default/grub"
+    - "curtin in-target -- update-grub"
