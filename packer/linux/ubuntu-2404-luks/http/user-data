@@ -139,7 +139,13 @@ autoinstall:
     # WICHTIG: Darf NICHT in Ansible-Playbook stehen, weil ein Reload des sshd
     # im Live-Installer Packers Password-Auth zerstoeren wuerde (Exit 254 beim
     # naechsten SCP-Upload). Config greift erst beim ersten Boot der Clone-VM.
-    - "curtin in-target -- sh -c 'cat > /etc/ssh/sshd_config.d/99-homelab-sshd.conf << EOF\n# HomeLab SSH Baseline\n# MaxAuthTries hoch: Bitwarden Desktop exportiert viele Keys gleichzeitig\nMaxAuthTries 30\nMaxSessions 10\n# Passwort-Login explizit deaktivieren — Cloud-Init setzt diesen Wert sonst zurueck\nPasswordAuthentication no\nPermitRootLogin prohibit-password\nKbdInteractiveAuthentication no\nEOF'"
+    # Einzeln echo statt heredoc — konsistent mit anderen late-commands.
+    - "curtin in-target -- sh -c 'echo \"# HomeLab SSH Baseline\" > /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
+    - "curtin in-target -- sh -c 'echo MaxAuthTries 30 >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
+    - "curtin in-target -- sh -c 'echo MaxSessions 10 >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
+    - "curtin in-target -- sh -c 'echo PasswordAuthentication no >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
+    - "curtin in-target -- sh -c 'echo PermitRootLogin prohibit-password >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
+    - "curtin in-target -- sh -c 'echo KbdInteractiveAuthentication no >> /etc/ssh/sshd_config.d/99-homelab-sshd.conf'"
     - "curtin in-target -- chmod 0644 /etc/ssh/sshd_config.d/99-homelab-sshd.conf"
     # Packer User Sudo-Rechte (explizit mit tee statt >>)
     - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
