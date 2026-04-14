@@ -1,3 +1,4 @@
+# Build-Trigger: 2026-04-14 (Debug-Run mit KEEP_FAILED_VM)
 packer {
   required_version = ">= 1.9.0"
   required_plugins {
