@@ -271,14 +271,17 @@ build {
     ]
   }
 
-  # LUKS-Verifikation (Pfad B: kein Clevis-Binding im Template)
+  # LUKS-Verifikation + Template-Status (Pfad B: kein Clevis-Binding im Template)
   # Tang-Binding erfolgt post-deployment via Ansible-Role clevis-tang-bind
   provisioner "shell" {
     inline = [
       "echo '=== LUKS-Verifikation ==='",
       "sudo cryptsetup isLuks /dev/sda3 && echo 'LUKS2 auf /dev/sda3 verifiziert' || { echo 'FEHLER: /dev/sda3 ist kein LUKS-Volume'; exit 1; }",
       "sudo cryptsetup luksDump /dev/sda3 | grep -E 'Version|LUKS'",
-      "echo 'Hinweis: Clevis/Tang-Binding via Ansible-Role clevis-tang-bind nach Deployment'",
+      "echo '=== Template-Status: Keyslot-Belegung ==='",
+      "sudo cryptsetup luksDump /dev/sda3 | grep -E '^  [0-9]+: luks2'",
+      "echo 'Keyslots: 0=packer-build-only, 4=/dev/sdb Keyfile (Auto-Unlock beim Boot)'",
+      "echo 'Post-Deployment (Ansible): Tang → Keyslot 3, Keyslot 4 removed, /dev/sdb detached'",
       "echo '=== LUKS-Verifikation abgeschlossen ==='"
     ]
   }
