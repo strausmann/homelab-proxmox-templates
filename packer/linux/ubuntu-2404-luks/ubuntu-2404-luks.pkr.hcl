@@ -256,13 +256,13 @@ build {
   # ein SSH-idle-timeout (exakt 5 Min: Error uploading script / Exit 254).
   provisioner "shell" {
     inline = [
-      "echo Warte auf Cloud-Init (max 60s)...",
+      "echo 'Warte auf Cloud-Init (max 60s)...'",
       "timeout 60 sudo cloud-init status --wait || echo '  cloud-init timeout oder error, fahre fort'",
-      "echo Cloud-Init-Wait abgeschlossen.",
-      "echo Warte bis apt-Lock frei ist (max 120s)...",
+      "echo 'Cloud-Init-Wait abgeschlossen.'",
+      "echo 'Warte bis apt-Lock frei ist (max 120s)...'",
       "timeout 120 sh -c 'while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do echo \"  apt dpkg-lock gehalten, warte 10s...\"; sleep 10; done' || echo '  apt-Lock timeout, fahre trotzdem fort'",
       "timeout 60 sh -c 'while sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do echo \"  apt-lists gesperrt, warte 10s...\"; sleep 10; done' || echo '  apt-lists-Lock timeout, fahre trotzdem fort'",
-      "echo apt-Lock-Wait abgeschlossen."
+      "echo 'apt-Lock-Wait abgeschlossen.'"
     ]
   }
 
