@@ -146,18 +146,14 @@ autoinstall:
     - "curtin in-target -- sed -i 's|GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"\"|' /etc/default/grub"
     - "curtin in-target -- update-grub"
     # ===================================================================
-    # PACKER-USER CLEANUP via Cloud-Init runcmd (Defekt #3)
-    # Problem: Der Packer-User kann sich nicht selbst loeschen waehrend eine
-    # aktive SSH-Session als dieser User laeuft.
-    # Loesung: Cloud-Init runcmd wird beim ersten Boot der geklonten VM
-    # ausgefuehrt — dann existiert keine Packer-Session mehr.
-    # Die Cleanup-Datei loescht sich selbst mit (kein Overlay-Effekt).
+    # PACKER-USER CLEANUP wird NICHT hier gemacht (Defekt #3 Fix).
+    #
+    # Frueher: Cloud-Init runcmd loeschte packer-User beim ersten Boot.
+    # Problem: Cloud-Init laeuft im installierten System schon waehrend
+    # des Packer-Builds (siehe SSH-Log VM 9051 Pipeline 25725: userdel
+    # packer passierte 1 Sekunde nach Packers SSH-Connect → Race
+    # Condition → SCP-Session zur Zombie-Session → Error 254).
+    #
+    # Neu: Packer-User-Cleanup macht die Ansible-Role post-deployment
+    # (clevis-tang-bind) nach erfolgreichem Tang-Bind.
     # ===================================================================
-    - "curtin in-target -- mkdir -p /etc/cloud/cloud.cfg.d"
-    - |
-      curtin in-target -- sh -c 'cat > /etc/cloud/cloud.cfg.d/99-packer-cleanup.cfg << '"'"'EOF'"'"'
-      runcmd:
-        - [ userdel, -rf, packer ]
-        - [ rm, -f, /etc/sudoers.d/packer ]
-        - [ rm, -f, /etc/cloud/cloud.cfg.d/99-packer-cleanup.cfg ]
-      EOF'
