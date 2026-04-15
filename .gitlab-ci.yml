@@ -1,4 +1,19 @@
 ---
+# Pipeline-Level Filter: Doku-Only Commits triggern keine Template-Builds.
+# Grund: README.md und CHANGELOG.md liegen pro Template unter packer/linux/**.
+# Die changes:-Regeln der einzelnen Jobs matchen /**/* und wuerden damit auch
+# reine Doku-Aenderungen einen ~20-Min Build ausloesen. Filter hier zentral.
+workflow:
+  rules:
+    # docs(...) Commits laut Conventional-Commits-Konvention (CLAUDE.md)
+    - if: $CI_COMMIT_TITLE =~ /^docs(\(.*\))?:/i
+      when: never
+    # Escape-Hatch fuer manuelle Pipeline-Unterdrueckung
+    - if: $CI_COMMIT_TITLE =~ /\[skip ci\]/i
+      when: never
+    # Alles andere wie gehabt
+    - when: always
+
 stages:
   - validate
   - build
