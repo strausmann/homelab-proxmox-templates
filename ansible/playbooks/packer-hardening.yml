@@ -186,30 +186,36 @@
         state: stopped
 
     # ===========================
-    # SSH Hardening
+    # SSH Hardening via Drop-In (99- Praefix fuer Vorrang gegen Cloud-Init 50-)
     # ===========================
-    - name: SSH Passwort-Login deaktivieren
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PasswordAuthentication"
-        line: "PasswordAuthentication no"
-        state: present
-
-    - name: SSH Root-Login per Key erlauben
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PermitRootLogin"
-        line: "PermitRootLogin prohibit-password"
-        state: present
-
-    # HINWEIS: 99-homelab-sshd.conf wird NICHT hier via Ansible geschrieben,
-    # sondern via curtin in-target in http/user-data late-commands.
-    #
-    # Grund: Ansible laeuft in Packer gegen die Subiquity-Installer-SSH-Session.
-    # Wenn der 'SSH Daemon reload' Handler ausgeloest wird, greift das
-    # 'PasswordAuthentication no' sofort im Live-Installer und Packer verliert
-    # die Moeglichkeit weitere Shell-Provisioner zu uploaden (Exit-Code 254).
-    # Die Config muss ausschliesslich im Ziel-System landen, nicht im Live-Installer.
+    # WICHTIG: Kein notify/Handler-Reload — der SSH-Reload wuerde die Packer-Session
+    # toeten (Exit-Code 254, Commit 0ca5217). Die Drop-In wird erst beim naechsten
+    # Boot des Clones aktiv (nach cloud-init cleanup + Reboot).
+    # lineinfile auf /etc/ssh/sshd_config wird NICHT mehr genutzt — Cloud-Init
+    # 50-cloud-init.conf wuerde direkte Aenderungen ohnehin ueberschreiben.
+    # Refs: .claude/rules/ssh-hardening-baseline.md
+    - name: SSH-Hardening Drop-In schreiben (99-homelab-sshd.conf)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-homelab-sshd.conf
+        content: |
+          # HomeLab SSH-Hardening Baseline
+          # 99- Praefix sorgt fuer Vorrang gegenueber Cloud-Init 50-cloud-init.conf
+          # Refs: .claude/rules/ssh-hardening-baseline.md
+          #
+          # MaxAuthTries 30: Bitwarden Desktop Agent bietet viele Keys parallel an —
+          # Default 6 reicht nicht (Too many authentication failures).
+          MaxAuthTries 30
+          MaxSessions 10
+          PasswordAuthentication no
+          PermitRootLogin prohibit-password
+          PubkeyAuthentication yes
+          KbdInteractiveAuthentication no
+          PermitEmptyPasswords no
+        owner: root
+        group: root
+        mode: "0644"
+      # KEIN notify — SSH-Reload in Packer-Session toetet den Build (Exit-Code 254).
+      # Drop-In wird erst beim naechsten Boot des Clones aktiv.
 
     # --- SSH Keys permanent fuer root ---
     - name: Root .ssh Verzeichnis erstellen
