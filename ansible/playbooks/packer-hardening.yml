@@ -257,6 +257,35 @@
       when: ubuntu_user.ansible_facts.getent_passwd.ubuntu is defined
 
     # ===========================
+    # GRUB: Predictable Interface Naming deaktivieren
+    # Notwendig fuer Clevis/Tang Auto-Unlock im initramfs:
+    # Ubuntu 24.04 benennt Interface via Netplan .link-Datei zu eth0 um —
+    # funktioniert aber nur im normalen Boot. Im initramfs heisst das Interface
+    # enp6s18 (PCI-Pfad). Dadurch schlaegt Tang Auto-Unlock fehl weil Clevis-DHCP
+    # eth0 sucht aber enp6s18 bekommt. net.ifnames=0 macht den Namen systemweit
+    # konsistent (eth0 in initramfs UND Runtime). Refs #213
+    # ===========================
+    - name: "GRUB Cmdline — net.ifnames=0 biosdevname=0 setzen"
+      ansible.builtin.lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_CMDLINE_LINUX='
+        line: 'GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"'
+        state: present
+      notify:
+        - GRUB aktualisieren
+        - Initramfs aktualisieren
+
+    - name: "Netplan — Interface-Namen von enp6s18 auf eth0 anpassen"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: 'enp6s18'
+        replace: 'eth0'
+      with_fileglob:
+        - /etc/netplan/*.yaml
+        - /etc/netplan/*.yml
+      register: netplan_updated
+
+    # ===========================
     # Cloud-Init Datasource
     # ===========================
     - name: Cloud-Init Datasource auf NoCloud setzen
@@ -294,5 +323,13 @@
   handlers:
     - name: Keyboard Config anwenden
       ansible.builtin.command: dpkg-reconfigure -f noninteractive keyboard-configuration
+      changed_when: true
+
+    - name: GRUB aktualisieren
+      ansible.builtin.command: update-grub
+      changed_when: true
+
+    - name: Initramfs aktualisieren
+      ansible.builtin.command: update-initramfs -u -k all
       changed_when: true
 
