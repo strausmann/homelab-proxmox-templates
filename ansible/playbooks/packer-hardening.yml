@@ -139,7 +139,7 @@
     # ===========================
     - name: Tailscale APT Suite bestimmen (Fallback noble fuer neue Releases)
       ansible.builtin.set_fact:
-        tailscale_apt_suite: "{{ 'noble' if ansible_distribution_release in ['resolute'] else ansible_distribution_release }}"
+        tailscale_apt_suite: "{{ 'noble' if ansible_facts['distribution_release'] in ['resolute'] else ansible_facts['distribution_release'] }}"
 
     - name: Tailscale GPG Key herunterladen
       ansible.builtin.get_url:
