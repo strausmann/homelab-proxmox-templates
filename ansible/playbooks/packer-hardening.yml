@@ -275,14 +275,23 @@
         - GRUB aktualisieren
         - Initramfs aktualisieren
 
+    # fileglob wuerde auf dem Controller (Runner) suchen — wir brauchen
+    # aber Dateien auf dem Target. Deshalb find + loop.
+    - name: "Netplan — Config-Dateien auf Target suchen"
+      ansible.builtin.find:
+        paths: /etc/netplan
+        patterns:
+          - '*.yaml'
+          - '*.yml'
+      register: netplan_files
+
     - name: "Netplan — Interface-Namen von enp6s18 auf eth0 anpassen"
       ansible.builtin.replace:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         regexp: 'enp6s18'
         replace: 'eth0'
-      with_fileglob:
-        - /etc/netplan/*.yaml
-        - /etc/netplan/*.yml
+      loop: "{{ netplan_files.files }}"
+      when: netplan_files.matched | int > 0
       register: netplan_updated
 
     # ===========================
