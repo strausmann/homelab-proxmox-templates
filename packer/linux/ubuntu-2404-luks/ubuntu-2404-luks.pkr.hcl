@@ -290,8 +290,8 @@ build {
       "sudo cryptsetup luksDump /dev/sda3 | grep -E 'Version|LUKS'",
       "echo '=== Template-Status: Keyslot-Belegung ==='",
       "sudo cryptsetup luksDump /dev/sda3 | grep -E '^  [0-9]+: luks2'",
-      "echo 'Keyslots: 0=packer-build-only, 4=/dev/sdb Keyfile (Auto-Unlock beim Boot)'",
-      "echo 'Post-Deployment (Ansible): Tang → Keyslot 3, Keyslot 4 removed, /dev/sdb detached'",
+      "echo 'Keyslots: 0=packer-build-only, 4=/etc/cryptsetup-keys.d/luks-keyfile.key (Auto-Unlock)'",
+      "echo 'Post-Deployment (Ansible clevis-tang-bind): Tang → Keyslot 3, Keyslot 4 removed, Keyfile removed'",
       "echo '=== LUKS-Verifikation abgeschlossen ==='"
     ]
   }

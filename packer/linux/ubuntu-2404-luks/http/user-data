@@ -108,20 +108,42 @@ autoinstall:
     # QEMU Guest Agent aktivieren (Packer braucht ihn fuer IP-Erkennung)
     - "curtin in-target -- systemctl enable qemu-guest-agent"
     # ===================================================================
-    # AUFGERÄUMT 2026-04-15: Keyfile-Provisioning + SSH-Hardening wurden
-    # aus user-data entfernt. Grund: 20+ curtin-in-target-Calls in late-
-    # commands haben zum Deadlock gefuehrt (unattended-upgrade-shutdown
-    # blockiert mit cloud-init → Packer SCP-Timeout nach 5 Min).
+    # KEYFILE-PROVISIONING via KEYFILE_PATTERN (Issue #214 Defekt #1)
+    # Keyfile wird als regulaere Datei in /etc/cryptsetup-keys.d/ abgelegt
+    # und durch cryptsetup-initramfs ins initramfs eingebettet.
+    # Block-Device-Keyfiles werden von Ubuntu 24.04 nicht unterstuetzt
+    # ohne Custom-initramfs-Hook — daher File-basiert.
     #
-    # Diese Schritte werden stattdessen post-deployment erledigt:
-    # - Keyfile/Tang-Binding: Ansible-Role clevis-tang-bind
-    # - SSH-Hardening: Ansible-Role oder separates Playbook
-    # - Packer-User-Cleanup: cloud-init runcmd (weiter unten)
+    # Zweck: Vollautomatischer Build in GitLab CI ohne manuelle Eingabe.
+    # Der Packer-Build kann nach Subiquity-Reboot via Keyfile im initramfs
+    # automatisch weiterfahren — kein manueller LUKS-Prompt.
     #
-    # Template hat beim ersten Clone-Boot einen LUKS-Prompt — dieser wird
-    # temporaer manuell (oder via qm-monitor-sendkey) mit 'packer-build-only'
-    # beantwortet. Danach uebernimmt Ansible das komplette Hardening und
-    # richtet autonomen Auto-Unlock ein.
+    # Keyfile fuer automatischen Build-Unlock (wird durch Ansible-Role
+    # clevis-tang-bind post-deploy entfernt):
+    #   1. cryptsetup reencrypt → neuer Master Key (VM-unique)
+    #   2. clevis luks bind → Tang-Keyslot 3
+    #   3. cryptsetup luksKillSlot 4 → Keyfile-Slot entfernen
+    #   4. rm /etc/cryptsetup-keys.d/luks-keyfile.key
+    #   5. update-initramfs -u -k all → Keyfile aus initramfs entfernt
+    # → Produktiv-VM hat weder Keyfile-File noch Keyslot-4 noch Keyfile im initramfs.
+    #
+    # Refs #214
+    # ===================================================================
+    # 1. Random-Keyfile als File im Target anlegen (4096 Bytes, chmod 0400)
+    - "curtin in-target -- mkdir -p /etc/cryptsetup-keys.d"
+    - "curtin in-target -- sh -c 'dd if=/dev/urandom of=/etc/cryptsetup-keys.d/luks-keyfile.key bs=4096 count=1 conv=fsync'"
+    - "curtin in-target -- chmod 0400 /etc/cryptsetup-keys.d/luks-keyfile.key"
+    # 2. Keyfile als LUKS-Keyslot 4 hinzufuegen (mit Primaer-Passphrase entsperren)
+    - "sh -c 'LUKS_UUID=$(blkid -s UUID -o value /dev/sda3); printf \"%s\" \"packer-build-only\" | curtin in-target -- cryptsetup luksAddKey --key-slot 4 --new-keyfile-size 4096 /dev/disk/by-uuid/$LUKS_UUID /etc/cryptsetup-keys.d/luks-keyfile.key'"
+    # 3. crypttab umschreiben: Keyfile-File statt "none" (interaktiv) oder Block-Device
+    #    Format: NAME  SOURCE-UUID  KEY-FILE  OPTIONS
+    - "sh -c 'echo \"crypt-root UUID=$(blkid -s UUID -o value /dev/sda3) /etc/cryptsetup-keys.d/luks-keyfile.key luks,keyfile-size=4096,discard\" > /target/etc/crypttab'"
+    # 4. KEYFILE_PATTERN im cryptsetup-initramfs Hook setzen → Keyfile wird ins initramfs embedded
+    - "sh -c 'echo KEYFILE_PATTERN=/etc/cryptsetup-keys.d/*.key >> /target/etc/cryptsetup-initramfs/conf-hook'"
+    # 5. UMASK=0077 damit initramfs-Dateirechte den Keyfile-Inhalt schuetzen
+    - "sh -c 'echo UMASK=0077 >> /target/etc/initramfs-tools/initramfs.conf'"
+    # 6. Initramfs neu bauen — Keyfile wird eingebettet, crypttab uebernommen
+    - "curtin in-target -- update-initramfs -u -k all"
     # ===================================================================
     # Packer User Sudo-Rechte (explizit mit tee statt >>)
     - "echo 'packer ALL=(ALL) NOPASSWD: ALL' | tee /target/etc/sudoers.d/packer"
