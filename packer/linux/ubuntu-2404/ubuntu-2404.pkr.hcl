@@ -237,10 +237,17 @@ build {
   }
 
   # Ansible Provisioner für Base-Setup
+  #
+  # ansible_remote_tmp explizit auf /tmp/.ansible-packer setzen:
+  # Packer's Ansible-Provisioner nutzt den CWD des Templates als Startpfad —
+  # ansible.cfg liegt unter ansible/ und wird nicht gefunden. Ohne explizites
+  # remote_tmp versucht Ansible /root/.ansible/tmp zu erstellen, was fehlschlaegt.
+  # /tmp ist immer schreibbar. Pattern aus dem LUKS-Template uebernommen.
   provisioner "ansible" {
     playbook_file = "../../../ansible/playbooks/packer-hardening.yml"
     extra_arguments = [
-      "--extra-vars", "packer_build=true"
+      "--extra-vars", "packer_build=true",
+      "-e", "ansible_remote_tmp=/tmp/.ansible-packer"
     ]
   }
 

@@ -93,7 +93,7 @@ variables:
       fi
 
       # VM-ID in Datei speichern fuer after_script Cleanup und deploy Stage
-      echo "${VM_ID}" > /tmp/packer-vm-id-${CI_PIPELINE_ID}
+      echo "${VM_ID}" > /tmp/packer-vm-id-${CI_JOB_ID}
       mkdir -p ${CI_PROJECT_DIR}/build-artifacts
       echo "${VM_ID}" > ${CI_PROJECT_DIR}/build-artifacts/vm-id.txt
       echo "${TEMPLATE_NAME}" > ${CI_PROJECT_DIR}/build-artifacts/template-name.txt
@@ -121,7 +121,7 @@ variables:
         -var "vm_bridge=${PKR_VAR_vm_bridge:-vnet60}" \
         -var "iso_file=${PKR_VAR_iso_file:-${DEFAULT_ISO_FILE}}" \
         -var "vm_id=${VM_ID}" \
-        -var "vm_name=${TEMPLATE_OS}-${TEMPLATE_VERSION}-packer-${CI_PIPELINE_ID}" \
+        -var "vm_name=${TEMPLATE_OS}-${TEMPLATE_VERSION}-packer-${CI_JOB_ID}" \
         -var "template_name=${TEMPLATE_NAME}" \
         -var "vm_cpu_cores=6" \
         -var "vm_memory=8192" \
@@ -141,7 +141,7 @@ variables:
         -d "cores=4&memory=4096" || true
 
       # Build erfolgreich — VM-ID Datei entfernen (kein Cleanup noetig)
-      rm -f /tmp/packer-vm-id-${CI_PIPELINE_ID}
+      rm -f /tmp/packer-vm-id-${CI_JOB_ID}
 
       echo ""
       echo "================================================="
@@ -155,7 +155,7 @@ variables:
       # Opt-in: Fehlgeschlagene Build-VM fuer Debugging erhalten
       # Aktivieren per Push-Option: git push -o ci.variable="KEEP_FAILED_VM=true"
       if [ "${KEEP_FAILED_VM:-false}" = "true" ]; then
-        VM_ID_FILE="/tmp/packer-vm-id-${CI_PIPELINE_ID}"
+        VM_ID_FILE="/tmp/packer-vm-id-${CI_JOB_ID}"
         if [ -f "${VM_ID_FILE}" ]; then
           VM_ID=$(cat "${VM_ID_FILE}")
           echo "================================================="
@@ -170,7 +170,7 @@ variables:
 
       # Cleanup: NUR die eigene Build-VM entfernen (bei Abbruch oder Fehler)
       # WICHTIG: Nie fremde VMs loeschen — nur die VM-ID aus der eigenen Datei
-      VM_ID_FILE="/tmp/packer-vm-id-${CI_PIPELINE_ID}"
+      VM_ID_FILE="/tmp/packer-vm-id-${CI_JOB_ID}"
       if [ -f "${VM_ID_FILE}" ]; then
         VM_ID=$(cat "${VM_ID_FILE}")
 
@@ -179,7 +179,7 @@ variables:
         VM_NAME=$(curl -sfk "${PKR_VAR_proxmox_url}/nodes/${PKR_VAR_proxmox_node:-PVE1}/qemu/${VM_ID}/config" \
           -H "${PVE_AUTH}" 2>/dev/null | jq -r '.data.name // ""')
 
-        if echo "${VM_NAME}" | grep -q "packer-${CI_PIPELINE_ID}"; then
+        if echo "${VM_NAME}" | grep -q "packer-${CI_JOB_ID}"; then
           echo "================================================="
           echo "  CLEANUP: Build abgebrochen/fehlgeschlagen"
           echo "  Entferne eigene VM ${VM_ID} (${VM_NAME})..."
