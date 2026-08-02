@@ -74,8 +74,20 @@ ansible-playbook -i inventory/hosts.yml playbooks/base-linux.yml
 │   ├── roles/
 │   └── inventory/
 └── scripts/
-    └── create-template-manual.sh  # Manuelle Alternative ohne Packer
+    ├── create-template-manual.sh          # Manuelle Alternative ohne Packer
+    └── build-ax41-cloud-template.sh       # Cloud-Image-Template-Build (AX41/Tailnet-Nodes)
 ```
+
+## Build-Methoden: Packer-Autoinstall vs. Cloud-Image
+
+Dieses Repo baut Templates auf zwei Wegen — welcher fuer ein neues Standard-Image
+passt, steht in **[docs/build-methoden.md](docs/build-methoden.md)**:
+
+- **Cloud-Image** (Default fuer Standard-VMs, zwingend fuer Tailnet-Nodes ohne
+  LAN-Callback-Weg wie AX41) — siehe `scripts/build-ax41-cloud-template.sh` und
+  den CI-Job `build_ax41_ubuntu_2404_cloud`.
+- **Packer-Autoinstall** (Sonderfaelle: LUKS, custom Partitionierung/RAID,
+  Build-Zeit-Hardening) — der bestehende PVE1-Weg unter `packer/linux/*`.
 
 ## Referenzen
 
