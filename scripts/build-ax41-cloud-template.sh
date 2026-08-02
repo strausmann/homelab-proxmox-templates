@@ -66,7 +66,9 @@ SHA_URL="${IMAGE_BASE_URL}/SHA256SUMS"
 CACHE_DIR="/var/cache/homelab-cloud-images"
 IMAGE_PATH="${CACHE_DIR}/${IMAGE_FILENAME}"
 
-NBD_DEV="/dev/nbd0"
+NBD_DEV=""  # wird dynamisch als freies /dev/nbdX ermittelt (siehe unten) —
+            # NICHT fest auf /dev/nbd0 verdrahten, sonst Kollisionsrisiko mit
+            # anderen qemu-nbd-Nutzern auf demselben Host.
 MOUNT_DIR="/mnt/homelab-template-build-${VMID}"
 
 # Root-authorized_keys: Automations-Key (Ansible/Node-Fleet) + persoenlicher
@@ -171,9 +173,25 @@ DISK_PATH_RAW=$(qm config "${VMID}" | awk -F': ' '/^scsi0:/ {print $2}' | cut -d
 DISK_ABS_PATH=$(pvesm path "${DISK_PATH_RAW}")
 echo "Disk-Datei fuer Offline-Bearbeitung: ${DISK_ABS_PATH}"
 
-log "Root-Partition per qemu-nbd einhaengen (Host-Netzwerk-Namespace, kein Gast-Boot)"
+log "Freies NBD-Device ermitteln (kollisionssicher statt fest /dev/nbd0)"
 modprobe nbd max_part=16
-qemu-nbd -d "${NBD_DEV}" &>/dev/null || true
+for _i in $(seq 0 15); do
+  _candidate="/dev/nbd${_i}"
+  [ -e "${_candidate}" ] || continue
+  _size_file="/sys/class/block/nbd${_i}/size"
+  # size == 0 heisst: Device ist aktuell NICHT per qemu-nbd verbunden.
+  if [ -f "${_size_file}" ] && [ "$(cat "${_size_file}")" = "0" ]; then
+    NBD_DEV="${_candidate}"
+    break
+  fi
+done
+if [ -z "${NBD_DEV}" ]; then
+  echo "FEHLER: Kein freies /dev/nbdX-Device (0-15) gefunden — alle belegt." >&2
+  exit 1
+fi
+echo "Verwende freies NBD-Device: ${NBD_DEV}"
+
+log "Root-Partition per qemu-nbd einhaengen (Host-Netzwerk-Namespace, kein Gast-Boot)"
 qemu-nbd -c "${NBD_DEV}" "${DISK_ABS_PATH}"
 udevadm settle || sleep 2
 
@@ -238,7 +256,7 @@ fi
 rm -f "${MOUNT_DIR}/etc/resolv.conf"
 cp -L /etc/resolv.conf "${MOUNT_DIR}/etc/resolv.conf"
 
-chroot "${MOUNT_DIR}" bash -c "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y qemu-guest-agent cloud-init openssh-server ca-certificates curl vim htop"
+chroot "${MOUNT_DIR}" bash -c "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y qemu-guest-agent cloud-init openssh-server ca-certificates curl vim htop && apt-get clean && rm -rf /var/lib/apt/lists/*"
 
 # resolv.conf zuruecksetzen
 rm -f "${MOUNT_DIR}/etc/resolv.conf"

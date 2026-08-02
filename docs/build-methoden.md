@@ -12,8 +12,8 @@ neues Standard-Image gewählt werden sollte.
 |---|---|---|
 | **Quelle** | Installer-ISO (z. B. `ubuntu-24.04.4-live-server-amd64.iso`) | Fertiges, von der Distribution gepflegtes Cloud-Image (`.img`/`.qcow2`) |
 | **Werkzeug** | Packer (`packer/linux/*`, `packer/windows/*`) | Reines `qm` auf dem Proxmox-Node (`scripts/build-ax41-cloud-template.sh`) |
-| **Netzwerk während des Builds** | HTTP-Autoinstall-Callback + SSH zur transienten Build-VM — braucht ein **gemeinsames LAN/Tailnet zur Build-VM selbst** | Keins nötig — Härtung läuft ausschließlich über den **QEMU-Guest-Agent** (virtio-serial), auch ohne Gast-Netzwerk |
-| **Build-Dauer** | ~15–25 Minuten (volle OS-Installation) | ~3–8 Minuten (Image-Import + Guest-Agent-Härtung) |
+| **Netzwerk während des Builds** | HTTP-Autoinstall-Callback + SSH zur transienten Build-VM — braucht ein **gemeinsames LAN/Tailnet zur Build-VM selbst** | Keins nötig — die Disk wird **offline** per `qemu-nbd` gemountet und per `chroot` gehärtet, die VM wird dabei nie gebootet (kein Gast-Netzwerk nötig) |
+| **Build-Dauer** | ~15–25 Minuten (volle OS-Installation) | ~3–8 Minuten (Image-Import + Offline-Härtung) |
 | **Custom-Partitionierung/RAID/LUKS** | Ja, voll steuerbar (Autoinstall `late-commands`, siehe `ubuntu-2404-luks`) | Nein — Partitionslayout kommt fix aus dem Cloud-Image |
 | **Vendor-Vertrauen** | Kein Vertrauen ins Image nötig — alles wird aus einer verifizierten ISO frisch installiert | Vertrauen in das von der Distribution signierte/gehashte Cloud-Image nötig |
 | **Referenz-Implementierung** | `packer/linux/ubuntu-2404/`, `.gitlab-ci.yml` Jobs `validate_ubuntu_2404`/`build_ubuntu_2404` | `scripts/build-ax41-cloud-template.sh`, `.gitlab-ci.yml` Job `build_ax41_ubuntu_2404_cloud` |
@@ -32,20 +32,26 @@ Teil des Installers.
   laufen zu lassen. Beides setzt voraus, dass die transiente Build-VM
   während der Installation im selben LAN/Tailnet wie der Build-Host
   erreichbar ist.
-- **Cloud-Images bringen OS + Agent + cloud-init bereits fertig mit.** Der
-  Build besteht nur noch aus Disk-Import + Konfiguration — kein
-  Autoinstall-Callback, kein SSH-Tanz während der Installation. Die
-  Härtung/Konfiguration läuft stattdessen über den **QEMU-Guest-Agent**
-  (`qm guest exec`), der über den virtio-serial-Kanal des Hypervisors läuft
-  und **unabhängig vom Gast-Netzwerk** funktioniert.
+- **Cloud-Images bringen ein fertig installiertes OS + cloud-init mit** —
+  aber (jedenfalls beim offiziellen `noble-server-cloudimg-amd64.img`,
+  verifiziert 2026-08-02) **keinen vorinstallierten QEMU-Guest-Agent**. Der
+  Build besteht aus Disk-Import + **Offline-Konfiguration**: Die frisch
+  importierte Disk wird per `qemu-nbd` auf dem Proxmox-**Host** eingehängt
+  (chroot teilt sich dessen Netzwerk-Namespace) und dort per `chroot`
+  gehärtet (Root-SSH-Keys, SSH-Hardening-Baseline, `qemu-guest-agent`
+  nachinstallieren) — kein Autoinstall-Callback, kein SSH-Tanz zur Gast-VM,
+  und die VM wird zu keinem Zeitpunkt gebootet. Der QEMU-Guest-Agent ist hier
+  also ein **Ergebnis** der Offline-Härtung (für spätere Ansible/Proxmox-
+  Operationen), nicht das Werkzeug, mit dem gehärtet wird.
 
 Das ist der exakte Grund, warum der AX41-Node (`defks-proxmox-01`) zwingend
 den Cloud-Image-Weg braucht: Das Einzel-IP+vMAC-Netzwerkmodell dort (siehe
 `infra/ansible/inventory/host_vars/defks-proxmox-01.yml` im
 homelab-management-Repo) stellt der transienten Packer-Build-VM während der
 Installation **keine** erreichbare Adresse zur Verfügung — der
-Autoinstall-Callback und die SSH-Verbindung liefen ins Leere. Der
-QEMU-Guest-Agent braucht dagegen gar keine Netzwerkadresse.
+Autoinstall-Callback und die SSH-Verbindung liefen ins Leere. Die
+Offline-`qemu-nbd`-Bearbeitung braucht dagegen gar keine Netzwerkadresse der
+Gast-VM, weil sie ausschließlich im Netzwerk-Namespace des Hosts läuft.
 
 ## Entscheidungs-Guidance: Welcher Weg für ein neues Standard-Image?
 

@@ -619,9 +619,9 @@ rotate_latest_ubuntu_2604_docker:
 # (AX41 nutzt das Einzel-IP+vMAC-Modell, siehe
 # infra/ansible/inventory/host_vars/defks-proxmox-01.yml im
 # homelab-management-Repo — die einzige Zusatz-IP ist für die Test-VM VMID 100
-# reserviert). Stattdessen: Cloud-Image-Import + Härtung ausschließlich über
-# den QEMU-Guest-Agent (kein Gast-Netzwerk nötig), Details im Skript-Header
-# von scripts/build-ax41-cloud-template.sh.
+# reserviert). Stattdessen: Cloud-Image-Import + Härtung OFFLINE per
+# qemu-nbd/chroot auf dem Proxmox-Host (kein Gast-Netzwerk, kein Gast-Boot
+# nötig), Details im Skript-Header von scripts/build-ax41-cloud-template.sh.
 #
 # Der Runner (hhbuild01, Tag "packer") erreicht defks-proxmox-01 über
 # Tailscale (100.100.200.250) — die AX41-Host-Firewall lässt SSH/22 nur aus
