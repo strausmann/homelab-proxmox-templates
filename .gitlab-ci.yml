@@ -612,6 +612,65 @@ rotate_latest_ubuntu_2604_docker:
         - ansible/playbooks/packer-hardening-docker.yml
 
 # =============================================================================
+# AX41 Cloud-Image-Templates (defks-proxmox-01, Hetzner Tailnet-Node)
+# =============================================================================
+# Kein Packer/ISO-Autoinstall: die transiente Installer-Build-VM ist während
+# der Installation weder im Tailnet noch über die öffentliche IP erreichbar
+# (AX41 nutzt das Einzel-IP+vMAC-Modell, siehe
+# infra/ansible/inventory/host_vars/defks-proxmox-01.yml im
+# homelab-management-Repo — die einzige Zusatz-IP ist für die Test-VM VMID 100
+# reserviert). Stattdessen: Cloud-Image-Import + Härtung ausschließlich über
+# den QEMU-Guest-Agent (kein Gast-Netzwerk nötig), Details im Skript-Header
+# von scripts/build-ax41-cloud-template.sh.
+#
+# Der Runner (hhbuild01, Tag "packer") erreicht defks-proxmox-01 über
+# Tailscale (100.100.200.250) — die AX41-Host-Firewall lässt SSH/22 nur aus
+# dem Tailscale-Tailnet + Buchholz-Admin-WAN zu (IPSet "management").
+#
+# Benötigte CI/CD-Variablen (Settings → CI/CD → Variables, protected+masked):
+#   AX41_SSH_HOST          — Tailscale-IP von defks-proxmox-01 (100.100.200.250)
+#   AX41_SSH_PRIVATE_KEY   — Typ "File", Inhalt = privater Node-Automations-Key
+#                            (Gegenstück zu ~/.ssh/id_ed25519_homelab_nodes,
+#                            bereits als root-authorized_key auf dem Host
+#                            hinterlegt). KEIN Proxmox-API-Token nötig — das
+#                            Skript arbeitet ausschließlich über `qm` per SSH,
+#                            keine PVE-REST-API-Aufrufe.
+#
+# Destruktiv per Design (idempotenter Neubau derselben VMID) — deshalb IMMER
+# "when: manual", nie automatisch bei jedem Push.
+
+.ax41_cloud_template_base:
+  stage: build
+  tags:
+    - packer
+  timeout: 30 minutes
+  script:
+    - chmod 600 "${AX41_SSH_PRIVATE_KEY}"
+    - |
+      ssh -i "${AX41_SSH_PRIVATE_KEY}" \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=15 \
+        "root@${AX41_SSH_HOST:-100.100.200.250}" \
+        bash -s -- "${AX41_TEMPLATE_VMID}" "${AX41_TEMPLATE_NAME}" "${AX41_TEMPLATE_BRIDGE:-vmbr0}" "${AX41_TEMPLATE_STORAGE:-local}" "${AX41_TEMPLATE_CORES:-2}" "${AX41_TEMPLATE_MEMORY:-2048}" "${AX41_TEMPLATE_DISK_GB:-8}" \
+        < scripts/build-ax41-cloud-template.sh
+
+build_ax41_ubuntu_2404_cloud:
+  extends: .ax41_cloud_template_base
+  resource_group: ax41_cloud_template_ubuntu_2404
+  variables:
+    AX41_TEMPLATE_VMID: "9000"
+    AX41_TEMPLATE_NAME: "ubuntu-2404-cloud"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: manual
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - scripts/build-ax41-cloud-template.sh
+      when: manual
+
+# =============================================================================
 # Debian 12 (vorbereitet — Verzeichnis existiert noch nicht)
 # =============================================================================
 
