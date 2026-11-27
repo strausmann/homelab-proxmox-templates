@@ -220,7 +220,8 @@ chmod 600 "${MOUNT_DIR}/root/.ssh/authorized_keys"
 
 log "SSH-Hardening-Baseline schreiben (siehe ssh-hardening-baseline.md)"
 install -d -m 755 "${MOUNT_DIR}/etc/ssh/sshd_config.d"
-cat > "${MOUNT_DIR}/etc/ssh/sshd_config.d/99-homelab-sshd.conf" <<'EOF'
+# 01-: sshd uses the FIRST value found; drop-ins are read in lexical order, so this must sort before 50-cloud-init.conf
+cat > "${MOUNT_DIR}/etc/ssh/sshd_config.d/01-homelab-sshd.conf" <<'EOF'
 MaxAuthTries 30
 MaxSessions 10
 PasswordAuthentication no
