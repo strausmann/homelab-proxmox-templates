@@ -24,7 +24,7 @@ autoinstall:
         shell: /bin/bash
         # lock_passwd: false — Packer nutzt ssh_password fuer SSH-Login waehrend Build.
         # Password-Schutz nach dem Build:
-        #   - PasswordAuthentication no in 99-homelab-sshd.conf (Commit b2a8891)
+        #   - PasswordAuthentication no in 01-homelab-sshd.conf (Commit b2a8891)
         #   - Cloud-Init runcmd loescht packer-User beim ersten Boot der Clone-VM
         lock_passwd: false
         ssh_authorized_keys:

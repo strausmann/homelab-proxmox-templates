@@ -186,7 +186,7 @@
         state: stopped
 
     # ===========================
-    # SSH Hardening via Drop-In (99- Praefix fuer Vorrang gegen Cloud-Init 50-)
+    # SSH Hardening via Drop-In (01- prefix: sshd uses the FIRST value found, drop-ins are read in lexical order)
     # ===========================
     # WICHTIG: Kein notify/Handler-Reload — der SSH-Reload wuerde die Packer-Session
     # toeten (Exit-Code 254, Commit 0ca5217). Die Drop-In wird erst beim naechsten
@@ -194,12 +194,12 @@
     # lineinfile auf /etc/ssh/sshd_config wird NICHT mehr genutzt — Cloud-Init
     # 50-cloud-init.conf wuerde direkte Aenderungen ohnehin ueberschreiben.
     # Refs: .claude/rules/ssh-hardening-baseline.md
-    - name: SSH-Hardening Drop-In schreiben (99-homelab-sshd.conf)
+    - name: SSH-Hardening Drop-In schreiben (01-homelab-sshd.conf)
       ansible.builtin.copy:
-        dest: /etc/ssh/sshd_config.d/99-homelab-sshd.conf
+        dest: /etc/ssh/sshd_config.d/01-homelab-sshd.conf
         content: |
           # HomeLab SSH-Hardening Baseline
-          # 99- Praefix sorgt fuer Vorrang gegenueber Cloud-Init 50-cloud-init.conf
+          # 01- Praefix: in sshd gewinnt der ERSTE Wert, 50-cloud-init.conf (PasswordAuthentication yes) darf nicht davor liegen
           # Refs: .claude/rules/ssh-hardening-baseline.md
           #
           # MaxAuthTries 30: Bitwarden Desktop Agent bietet viele Keys parallel an —

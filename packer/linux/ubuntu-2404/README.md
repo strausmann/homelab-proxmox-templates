@@ -92,7 +92,7 @@ Das Hardening-Playbook `ansible/playbooks/packer-hardening.yml` ist die gemeinsa
 alle Templates. Es konfiguriert:
 
 - SSH: `PasswordAuthentication no`, `PermitRootLogin prohibit-password`
-- SSH Drop-In `/etc/ssh/sshd_config.d/99-homelab-sshd.conf`: `MaxAuthTries 30`, `MaxSessions 10`
+- SSH Drop-In `/etc/ssh/sshd_config.d/01-homelab-sshd.conf`: `MaxAuthTries 30`, `MaxSessions 10`
   (Bitwarden-Agent exportiert viele Keys parallel — Standard von 6 wuerde fehlschlagen)
 - Authorized Keys fuer `root` und `ubuntu` User (beide HomeLab SSH-Keys)
 - GRUB: `net.ifnames=0 biosdevname=0` (konsistentes Interface-Naming, wichtig fuer Clevis-LUKS)
